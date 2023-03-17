@@ -123,7 +123,7 @@ def merge_dfs_complete(dfs):
     sort_by_this_feat = "delta_mri_time0"
     mri_df = group_ts_df_by_id(mri_df, ID_FEAT, ts_feats, oo_feats, sort_by_this_feat)
 
-    grouped_dfs = [relapses_df, ms_type_df, mri_df, evoked_p_df, edss_df]
+    grouped_dfs = [edss_df, relapses_df, ms_type_df, evoked_p_df, mri_df]
     for df in grouped_dfs:
         merged_df = pd.merge(merged_df, df, on=[ID_FEAT, "centre"], how="outer")
 
