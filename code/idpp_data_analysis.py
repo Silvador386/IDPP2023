@@ -1,3 +1,4 @@
+import math
 import os
 import numpy as np
 import pandas as pd
@@ -131,4 +132,17 @@ def merge_dfs_complete(dfs):
 
 
 dfs = read_dfs(DATASET_DIR)
-merge_dfs_complete(dfs)
+merged_df = merge_dfs_complete(dfs)
+
+merged_df = merged_df.replace({np.nan: None})
+
+def calc_len(x):
+    if x is None:
+        return 0
+    else:
+        return len(x)
+
+plot_df = pd.DataFrame(merged_df[[ID_FEAT, "outcome_occurred", "delta_evoked_potential_time0"]])
+plot_df["delta_evoked_potential_time0_na"] = plot_df["delta_evoked_potential_time0"].isna()
+plot_df["delta_evoked_potential_time0_len"] = plot_df["delta_evoked_potential_time0"].apply(calc_len)
+sns.histplot(plot_df, x="outcome_occurred", y="delta_evoked_potential_time0_na")
