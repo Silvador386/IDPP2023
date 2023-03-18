@@ -29,6 +29,24 @@ from sklearn.metrics import mean_squared_error
 from sklearn.feature_selection import r_regression
 from sklearn import preprocessing
 
+plt.style.use("seaborn-v0_8-whitegrid")
+plt.rc("figure", autolayout=True, figsize=(11, 4))
+plt.rc(
+    "axes",
+    labelweight="bold",
+    labelsize="large",
+    titleweight="bold",
+    titlesize=16,
+    titlepad=10,
+)
+plot_params = dict(
+    color="0.75",
+    style=".-",
+    markeredgecolor="0.25",
+    markerfacecolor="0.25",
+)
+
+
 DATASET_DIR = "../data/datasetA_train"
 ID_FEAT = "patient_id"
 
@@ -136,13 +154,24 @@ merged_df = merge_dfs_complete(dfs)
 
 merged_df = merged_df.replace({np.nan: None})
 
-def calc_len(x):
-    if x is None:
-        return 0
-    else:
-        return len(x)
 
-plot_df = pd.DataFrame(merged_df[[ID_FEAT, "outcome_occurred", "delta_evoked_potential_time0"]])
-plot_df["delta_evoked_potential_time0_na"] = plot_df["delta_evoked_potential_time0"].isna()
-plot_df["delta_evoked_potential_time0_len"] = plot_df["delta_evoked_potential_time0"].apply(calc_len)
-sns.histplot(plot_df, x="outcome_occurred", y="delta_evoked_potential_time0_na")
+outcome, o_time = merged_df["outcome_occurred"], merged_df["outcome_time"]
+ts_feats = ['edss_as_evaluated_by_clinician', 'delta_edss_time0', 'delta_relapse_time0', 'delta_observation_time0', 'delta_evoked_potential_time0', 'delta_mri_time0']
+for feat in ts_feats:
+    fig, axes = plt.subplots(1, 2)
+    axes = axes.flat
+    X = merged_df[feat]
+    for x, out, ot in zip(X, outcome, o_time):
+        if x is None:
+            continue
+        else:
+            alpha = np.interp(len(x), [0, 30], [1, 0])
+            plot_params = dict(color="r" if out == 1 else "0.5",
+                               linestyle="--" if out == 1 else "-")
+            axes[0].plot(x, alpha=alpha, **plot_params)
+            axes[0].set(xlabel="Number of entries", ylabel=f"{feat}")
+
+            alpha = np.interp(ot, [0, 15], [0, 1])
+            axes[1].plot(x, alpha=alpha, **plot_params)
+
+    plt.show()
