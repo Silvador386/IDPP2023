@@ -69,9 +69,6 @@ def read_dfs(dir_path):
     return dfs
 
 
-dfs = read_dfs(DATASET_DIR)
-
-
 def dfs_unique_patients(dfs):
     out = {}
     for name, df in dfs.items():
@@ -153,10 +150,12 @@ dfs = read_dfs(DATASET_DIR)
 merged_df = merge_dfs_complete(dfs, DATASET)
 
 
-def encode_and_bind(original_dataframe, feature_to_encode):
-    dummies = pd.get_dummies(original_dataframe[[feature_to_encode]])
+def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
+    dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int64)
     res = pd.concat([original_dataframe, dummies], axis=1)
-    return(res)
+    if drop_org:
+        res = res.drop(feature_to_encode, axis=1)
+    return res
 
 
 def df_ts_func(df, feature, func, func_name):
@@ -170,25 +169,21 @@ def df_ts_func(df, feature, func, func_name):
     return pd.DataFrame(out)
 
 
+def df_normalize_col(df, feature):
+    pass
+
 
 def preprocess(merged_df):
     supported_funcs = {"len": len, "min": np.min, "max": np.max, "sum": np.sum, "avg": np.average}
     merged_df = merged_df.copy()
-    # sex_map = {"male": 1, "female": 2}
-    # merged_df["sex"] = merged_df["sex"].map(sex_map)
-    #
-    # residence_map = {"Towns": 1, "Rural Area": 2, "Cities": 3}
-    # merged_df["residence_classification"] = merged_df["residence_classification"].map(residence_map)
-    #
-    # ethnicity_map = {"Caucasian": 1, np.nan: 0}
-    # merged_df["ethnicity"] = merged_df["ethnicity"].map(ethnicity_map)
-    #
-    # centre_map = {"pavia": 1, "turin": 2}
-    # merged_df["ethnicity"] = merged_df["ethnicity"].map(centre_map)
-    # bool_features = ['ms_in_pediatric_age', 'spinal_cord_symptom', 'brainstem_symptom',
-    #                  'eye_symptom', 'supratentorial_symptom']
-    # for bool_feat in bool_features:
-    #     merged_df[bool_feat] = merged_df[bool_feat].astype(np.int64)
+
+    features_to_encode = ["sex", "residence_classification", "ethnicity", 'ms_in_pediatric_age', "centre",
+                          'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom', 'supratentorial_symptom',
+                          "other_symptoms"
+                          ]
+    for feature in features_to_encode:
+        merged_df = df_one_hot_encode(merged_df, feature, drop_org=True)
+
     feature = "edss_as_evaluated_by_clinician"
     created_dfs = [df_ts_func(merged_df, feature, func, name) for name, func in supported_funcs.items()]
     merged_df = pd.concat([merged_df, *created_dfs], axis=1)
@@ -197,28 +192,6 @@ def preprocess(merged_df):
 
 
 merged_df = merged_df.replace({np.nan: None})
-encode_and_bind(merged_df, "sex")
+df_one_hot_encode(merged_df, "sex")
 
 merged_df = preprocess(merged_df)
-
-print()
-# outcome, o_time = merged_df["outcome_occurred"], merged_df["outcome_time"]
-# ts_feats = ['edss_as_evaluated_by_clinician', 'delta_edss_time0', 'delta_relapse_time0', 'delta_observation_time0', 'delta_evoked_potential_time0', 'delta_mri_time0']
-# for feat in ts_feats:
-#     fig, axes = plt.subplots(1, 2)
-#     axes = axes.flat
-#     X = merged_df[feat]
-#     for x, out, ot in zip(X, outcome, o_time):
-#         if x is None:
-#             continue
-#         else:
-#             alpha = np.interp(len(x), [0, 30], [1, 0])
-#             plot_params = dict(color="r" if out == 1 else "0.5",
-#                                linestyle="--" if out == 1 else "-")
-#             axes[0].plot(x, alpha=alpha, **plot_params)
-#             axes[0].set(xlabel="Number of entries", ylabel=f"{feat}")
-#
-#             alpha = np.interp(ot, [0, 15], [0, 1])
-#             axes[1].plot(x, alpha=alpha, **plot_params)
-#
-#     plt.show()
