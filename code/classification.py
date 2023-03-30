@@ -12,7 +12,7 @@ import lightgbm
 
 
 def init_classifiers():
-    log_reg = LogisticRegression(max_iter=1000)
+    log_reg = LogisticRegression(max_iter=3000)
     svc = SVC()
     knn = KNeighborsClassifier(n_neighbors=5)
     gauss = GaussianNB()
