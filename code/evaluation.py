@@ -26,3 +26,7 @@ def evaluate_regressors_rmsle(regressors, X, y):
     for model_name, model in regressors.items():
         score = rmsle_cv(model, X, y)
         print(f"{model_name} score: {score.mean():.4f} ({score.std():.4f})")
+
+
+def evaluate_c_index(classifiers, regressors):
+    pass
