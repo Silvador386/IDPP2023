@@ -110,50 +110,33 @@ def fastai_tab(df, cat_names, cont_names, y_names, splits):
     X_train, y_train = to.train.xs, to.train.ys.values.ravel()
     X_valid, y_valid = to.valid.xs, to.valid.ys.values.ravel()
 
-    # y_train = pd.DataFrame({"outcome_occurred": y_train[::2],
-    #                         "outcome_time": y_train[1::2]}).to_records()
-    #
-    # y_valid = pd.DataFrame({"outcome_occurred": y_valid[::2],
-    #                         "outcome_time": y_valid[1::2]}).to_records()
-
-
-    # oo = y_train[::2].astype(dtype=bool)
-    # ot = y_train[1::2]
-    # y_train = np.array([oo, ot])
-    #
-    # oo = y_train[::2].astype(dtype=bool)
-    # ot = y_train[1::2]
-    # y_train = np.array([oo, ot])
-
-    y_train = np.array(
-        [(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y_train[::2], y_train[1::2])],
-        dtype=[('outcome_occurred', '?'), ('outcome_time', '<f8')])
-
-    y_valid = np.array(
-        [(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y_valid[::2], y_valid[1::2])],
-        dtype=[('outcome_occurred', '?'), ('outcome_time', '<f8')])
-
     return X_train, y_train, X_valid, y_valid
 
 
+def y_to_struct_array(y, dtype):
+    y = np.array(
+        [(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y[::2], y[1::2])],
+        dtype=dtype)
+    return y
+
 def collapse_cols(df, feats_to_be_collapsed):
+
+    def collapse_ts_feature_cols(df, feature, start_idx, end_idx=None):
+        selected_cols = [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
+        if end_idx:
+            cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:] < end_idx))]
+            new_feat_name = f"{feature}_{start_idx}-{end_idx}"
+        else:
+            cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:]))]
+            new_feat_name = f"{feature}_{start_idx}+"
+
+        df[new_feat_name] = ~df[cols_to_collapse].isna().all(axis=1)
+        df[new_feat_name] = df[new_feat_name].astype(np.int64)
+        df = df.drop(cols_to_collapse, axis=1)
+        return df
+
     for feat in feats_to_be_collapsed:
         df = collapse_ts_feature_cols(df, *feat)
-    return df
-
-
-def collapse_ts_feature_cols(df, feature, start_idx, end_idx=None):
-    selected_cols = [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
-    if end_idx:
-        cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:] < end_idx))]
-        new_feat_name = f"{feature}_{start_idx}-{end_idx}"
-    else:
-        cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:]))]
-        new_feat_name = f"{feature}_{start_idx}+"
-
-    df[new_feat_name] = ~df[cols_to_collapse].isna().all(axis=1)
-    df[new_feat_name] = df[new_feat_name].astype(np.int64)
-    df = df.drop(cols_to_collapse, axis=1)
     return df
 
 
