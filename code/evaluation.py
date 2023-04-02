@@ -30,11 +30,13 @@ def evaluate_regressors_rmsle(regressors, X, y):
         print(f"{model_name} score: {score.mean():.4f} ({score.std():.4f})")
 
 
+
 def evaluate_estimators(estimator, X, y, plot=True, print_coef=False):
     # prediction = estimator.predict(X)
     # result = concordance_index_censored([i for i, _ in y], [i for _, i in y], prediction)
 
-    print("Estimator C-Score", estimator.score(X, y))
+    c_score = estimator.score(X, y)
+    print("Estimator C-Score", c_score)
 
     def fit_and_score_features(X, y):
         n_features = X.shape[1]
@@ -48,11 +50,13 @@ def evaluate_estimators(estimator, X, y, plot=True, print_coef=False):
 
     if print_coef:
         scores = fit_and_score_features(X.values, y)
-        print("Importantce of features", pd.Series(scores, index=X.columns).sort_values(ascending=False))
+        print("Importance of features:\n", pd.Series(scores, index=X.columns).sort_values(ascending=False))
 
     if plot:
         plot_cox_step_funcs(estimator, X, print_coef)
         plot_kaplan([status for status, _ in y], [time for _, time in y])
+
+    return c_score
 
 
 def plot_cox_step_funcs(estimator, X, print_coefs=False):

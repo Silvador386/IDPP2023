@@ -17,7 +17,7 @@ feats_to_be_collapsed = [("new_or_enlarged_lesions_T2", 5, None),
                          ("lesions_T1_gadolinium", 5, None),
                          ("number_of_lesions_T1_gadolinium", 6, None),
                          ("edss_as_evaluated_by_clinician", 11, None),
-                         ("location", 9, None),
+                         # ("location", 9, None),
                          ("delta_edss_time0", 10, None),
                          ("number_of_total_lesions_T2", 3, None)]
 
@@ -53,7 +53,9 @@ def fastai_splits(df):
                                  'altered_potential_9+', 'potential_value_9+', 'delta_relapse_time0_3+', 'mri_area_label_6+',
                                  'delta_mri_time0_6+', 'lesions_T1_3+', 'lesions_T2_3+', 'delta_evoked_potential_time0_9+',
                                  'lesions_T1_gadolinium_5+', 'number_of_lesions_T1_gadolinium_6+',
-                                 'edss_as_evaluated_by_clinician_11+', 'location_9+', 'delta_edss_time0_10+',
+                                 'edss_as_evaluated_by_clinician_11+',
+                                 # 'location_9+',
+                                 'delta_edss_time0_10+',
                                  'number_of_total_lesions_T2_3+'],
                        "int64": ['age_at_onset', 'time_since_onset'],
                        "float64": ['diagnostic_delay', 'delta_relapse_time0_01', 'delta_relapse_time0_02',
@@ -87,12 +89,25 @@ def fastai_splits(df):
                                   'altered_potential_04', 'altered_potential_05', 'altered_potential_06',
                                   'altered_potential_07', 'altered_potential_08', 'potential_value_01', 'potential_value_02',
                                   'potential_value_03', 'potential_value_04', 'potential_value_05', 'potential_value_06',
-                                  'potential_value_07', 'potential_value_08', 'location_01', 'location_02', 'location_03',
-                                  'location_04', 'location_05', 'location_06', 'location_07', 'location_08']
+                                  'potential_value_07', 'potential_value_08', #'location_01',  #'location_02', 'location_03',
+                                  #'location_04', 'location_05', 'location_06', 'location_07', 'location_08'
+                                  ]
                        }
 
-    cat_names = [*col_value_types["bool"]]
-    cont_names = [ *col_value_types["int64"]]
+    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
+    cont_names = [*col_value_types["int64"], 'diagnostic_delay',
+                  #'edss_as_evaluated_by_clinician_01', #'edss_as_evaluated_by_clinician_02',
+                  # 'edss_as_evaluated_by_clinician_03', 'edss_as_evaluated_by_clinician_04',
+                  # 'edss_as_evaluated_by_clinician_05', 'edss_as_evaluated_by_clinician_06',
+                  # 'edss_as_evaluated_by_clinician_07', 'edss_as_evaluated_by_clinician_08',
+                  # 'edss_as_evaluated_by_clinician_09', 'edss_as_evaluated_by_clinician_10',
+                  #'delta_edss_time0_01',# 'delta_edss_time0_02', 'delta_edss_time0_03',
+                  # 'delta_edss_time0_04', 'delta_edss_time0_05', 'delta_edss_time0_06',
+                  # 'delta_edss_time0_07', 'delta_edss_time0_08', 'delta_edss_time0_09'
+
+
+
+                  ]
 
     # cont_names = cont_names.copy().remove(remove_feature)
 

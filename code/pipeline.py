@@ -30,6 +30,13 @@ class IDPPPipeline:
         self.merged_df = merge_dfs(self.dfs, self.dataset_name, self.id_feature)
         self.merged_df = preprocess(self.merged_df)
 
+        num_iter = 10
+        train_c_scores, val_c_scores = self.average_c_score(num_iter=num_iter)
+        print(f"Train ({num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
+        print(f"Train ({num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
+
+    def run_model(self):
+
         cat_names, cont_names, splits = fastai_splits(self.merged_df)
         X_train, y_train, X_valid, y_valid = fastai_tab(self.merged_df, cat_names, cont_names,
                                                         "outcome_occurred", splits)
@@ -51,9 +58,21 @@ class IDPPPipeline:
         estimator = CoxPHSurvivalAnalysis()
         estimator.fit(X_train, y_train)
         print("Train:")
-        evaluate_estimators(estimator, X_train, y_train, plot=False)
+        train_c_score = evaluate_estimators(estimator, X_train, y_train, plot=False)
         print("Val:")
-        evaluate_estimators(estimator, X_valid, y_valid, plot=False)
+        test_c_score = evaluate_estimators(estimator, X_valid, y_valid, plot=False, print_coef=False)
+
+        return train_c_score, test_c_score
+
+
+    def average_c_score(self, num_iter=5):
+        train_c_scores, val_c_scores = [], []
+        for _ in range(num_iter):
+            train_c_score, val_c_score = self.run_model()
+            train_c_scores.append(train_c_score)
+            val_c_scores.append(val_c_score)
+
+        return np.array(train_c_scores), np.array(val_c_scores)
 
 
 def main():
