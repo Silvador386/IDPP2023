@@ -31,9 +31,11 @@ class IDPPPipeline:
         self.merged_df = preprocess(self.merged_df)
 
         num_iter = 10
-        train_c_scores, val_c_scores = self.average_c_score(num_iter=num_iter)
+        train_c_scores, val_c_scores, best_estimator = self.average_c_score(num_iter=num_iter)
         print(f"Train ({num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
-        print(f"Train ({num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
+        print(f"Val   ({num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
+
+
 
     def run_model(self):
 
@@ -55,24 +57,31 @@ class IDPPPipeline:
         # evaluate_regressors_rmsle(regressors, X_train, y_train)
         # evaluate_regressors_rmsle(regressors, X_valid, y_valid)
 
-        estimator = CoxPHSurvivalAnalysis()
+        from sksurv.ensemble import RandomSurvivalForest, ComponentwiseGradientBoostingSurvivalAnalysis, GradientBoostingSurvivalAnalysis
+        from sksurv.svm import FastKernelSurvivalSVM, HingeLossSurvivalSVM, MinlipSurvivalAnalysis
+
+        # estimator = RandomSurvivalForest(n_estimators=500, min_samples_leaf=7, random_state=0)
+        # estimator = GradientBoostingSurvivalAnalysis()
+        estimator = MinlipSurvivalAnalysis()
         estimator.fit(X_train, y_train)
         print("Train:")
         train_c_score = evaluate_estimators(estimator, X_train, y_train, plot=False)
         print("Val:")
         test_c_score = evaluate_estimators(estimator, X_valid, y_valid, plot=False, print_coef=False)
 
-        return train_c_score, test_c_score
+        return train_c_score, test_c_score, estimator
 
 
     def average_c_score(self, num_iter=5):
-        train_c_scores, val_c_scores = [], []
+        train_c_scores, val_c_scores, estimators = [], [], []
         for _ in range(num_iter):
-            train_c_score, val_c_score = self.run_model()
+            train_c_score, val_c_score, estimator = self.run_model()
             train_c_scores.append(train_c_score)
             val_c_scores.append(val_c_score)
+            estimators.append(estimator)
 
-        return np.array(train_c_scores), np.array(val_c_scores)
+        best_estimator = estimators[np.array(val_c_scores).argmax()]
+        return np.array(train_c_scores), np.array(val_c_scores), best_estimator
 
 
 def main():
