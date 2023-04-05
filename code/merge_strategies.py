@@ -43,6 +43,7 @@ def transpose_df_by_uniques(orig_df, id_feat, time_series_feats, one_occurrence_
                                      index=orig_df[id_feat].unique())
         return transposed_df
 
+
     orig_df = orig_df.sort_values(by=[id_feat, sort_by_this_feat])
     ts_dfs = [transpose_cols_to_rows_by_uniques(orig_df, id_feat, ts_feat) for ts_feat in time_series_feats]
     oo_dfs = [transpose_cols_to_rows_by_1st_unique(orig_df, id_feat, oo_feat) for oo_feat in one_occurrence_feats]

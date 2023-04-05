@@ -30,7 +30,6 @@ def evaluate_regressors_rmsle(regressors, X, y):
         print(f"{model_name} score: {score.mean():.4f} ({score.std():.4f})")
 
 
-
 def evaluate_estimators(estimator, X, y, plot=True, print_coef=False):
     # prediction = estimator.predict(X)
     # result = concordance_index_censored([i for i, _ in y], [i for _, i in y], prediction)

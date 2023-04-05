@@ -4,6 +4,20 @@ from fastai.tabular.all import RandomSplitter, range_of, TabularPandas,\
     Categorify, FillMissing, Normalize, CategoryBlock
 
 
+ALL_FEATURES = ['patient_id', 'sex', 'residence_classification', 'ethnicity',
+                'ms_in_pediatric_age', 'age_at_onset', 'diagnostic_delay',
+                'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom',
+                'supratentorial_symptom', 'other_symptoms', 'centre',
+                'time_since_onset', 'outcome_occurred', 'outcome_time',
+                'edss_as_evaluated_by_clinician', 'delta_edss_time0',
+                'delta_relapse_time0', 'multiple_sclerosis_type',
+                'delta_observation_time0', 'altered_potential', 'potential_value',
+                'location', 'delta_evoked_potential_time0', 'mri_area_label',
+                'lesions_T1', 'lesions_T1_gadolinium',
+                'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
+                'number_of_new_or_enlarged_lesions_T2', 'lesions_T2',
+                'number_of_total_lesions_T2', 'delta_mri_time0']
+
 feats_to_be_collapsed = [("new_or_enlarged_lesions_T2", 5, None),
                          ("number_of_new_or_enlarged_lesions_T2",   5, None),
                          ("altered_potential", 9, None),
@@ -30,20 +44,26 @@ def preprocess(merged_df):
                           'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom', 'supratentorial_symptom',
                           "other_symptoms"
                           ]
-    # for feature in features_to_encode:
-    #     merged_df = df_one_hot_encode(merged_df, feature, drop_org=True)
+    for feature in features_to_encode:
+        merged_df = df_one_hot_encode(merged_df, feature, drop_org=True)
 
-    # feature = "edss_as_evaluated_by_clinician"
-    # created_dfs = [df_ts_func(merged_df, feature, func, name) for name, func in supported_funcs.items()]
-    # merged_df = pd.concat([merged_df, *created_dfs], axis=1)
+    ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
+                   "delta_evoked_potential_time0", "delta_relapse_time0"]
 
-    merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
+    merged_df = create_ts_features(merged_df, ts_features, drop_original=True)
+
+    target_features = ['outcome_occurred', 'outcome_time']
+    unfinished_features = list(set(ALL_FEATURES).difference([*features_to_encode, *ts_features, *target_features]))
+    cols_to_drop = []
+    for un_feat in unfinished_features:
+        cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
+    merged_df = merged_df.drop(cols_to_drop, axis=1)
+    # merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
 
     return merged_df
 
 
 def fastai_splits(df):
-    col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     # TODO add option to add outcome_time/outcome_occurred_depending on the preceding calculation
 
@@ -95,9 +115,11 @@ def fastai_splits(df):
                                   'location_04', 'location_05', 'location_06', 'location_07', 'location_08'
                                   ]
                        }
+    col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
-    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
-    cont_names = [*col_value_types["int64"], *col_value_types["float64"], *col_value_types["int32"]# 'diagnostic_delay',
+    col_value_types = {f"{key}": value for key, value in col_value_types.items()}
+    cat_names = [ *col_value_types["object"]]
+    cont_names = [*col_value_types["int64"], *col_value_types["float64"]# 'diagnostic_delay',
                   # # 'edss_as_evaluated_by_clinician_01', #'edss_as_evaluated_by_clinician_02',
                   # 'edss_as_evaluated_by_clinician_03', 'edss_as_evaluated_by_clinician_04',
                   # 'edss_as_evaluated_by_clinician_05', 'edss_as_evaluated_by_clinician_06',
@@ -155,6 +177,37 @@ def collapse_cols(df, feats_to_be_collapsed):
     return df
 
 
+def create_ts_features(df, features, drop_original=False):
+    # df = df.copy()
+    funcs = {"len": len,
+             "max": np.max,
+             "min": np.min,
+             "sum": np.sum,
+             "avg": np.average,
+             "std": np.std}
+    for feature in features:
+        col_names = select_same_feature_col_names(df, feature)
+
+        new_dfs = []
+        for f_name, func in funcs.items():
+            new_features_df = df_ts_func(df, col_names, func, f_name, new_feature_name=feature)
+            new_dfs.append(new_features_df)
+
+        df = pd.concat([df, *new_dfs], axis=1)
+
+        if drop_original:
+            df = df.drop(col_names, axis=1)
+
+    return df
+
+
+def select_same_feature_col_names(df, feature) -> list:
+    return [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
+
+
+
+
+
 def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
     dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int64)
     res = pd.concat([original_dataframe, dummies], axis=1)
@@ -163,14 +216,15 @@ def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
     return res
 
 
-def df_ts_func(df, feature, func, func_name):
+def df_ts_func(df, feature, func, func_name, new_feature_name):
     calculated_values = []
-    for ts in df[feature]:
-        if ts is None:
+    for index, ts_row in df[feature].iterrows():
+        ts_row = ts_row.dropna()
+        if ts_row.empty:
             calculated_values.append(None)
         else:
-            calculated_values.append(func(ts))
-    out = {f"{feature}_{func_name}": calculated_values}
+            calculated_values.append(func(ts_row))
+    out = {f"{new_feature_name}_{func_name}": calculated_values}
     return pd.DataFrame(out)
 
 

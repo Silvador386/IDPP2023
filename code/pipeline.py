@@ -30,7 +30,7 @@ class IDPPPipeline:
         self.merged_df = merge_dfs(self.dfs, self.dataset_name, self.id_feature)
         self.merged_df = preprocess(self.merged_df)
 
-        num_iter = 10
+        num_iter = 5
         train_c_scores, val_c_scores, best_estimator = self.average_c_score(num_iter=num_iter)
         print(f"Train ({num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
         print(f"Val   ({num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
@@ -60,14 +60,14 @@ class IDPPPipeline:
         from sksurv.ensemble import RandomSurvivalForest, ComponentwiseGradientBoostingSurvivalAnalysis, GradientBoostingSurvivalAnalysis
         from sksurv.svm import FastKernelSurvivalSVM, HingeLossSurvivalSVM, MinlipSurvivalAnalysis
 
-        # estimator = RandomSurvivalForest(n_estimators=500, min_samples_leaf=7, random_state=0)
+        estimator = RandomSurvivalForest(n_estimators=500, min_samples_leaf=7, random_state=0)
         # estimator = GradientBoostingSurvivalAnalysis()
-        estimator = MinlipSurvivalAnalysis()
+        # estimator = MinlipSurvivalAnalysis()
         estimator.fit(X_train, y_train)
         print("Train:")
-        train_c_score = evaluate_estimators(estimator, X_train, y_train, plot=False)
+        train_c_score = evaluate_estimators(estimator, X_train, y_train, plot=True)
         print("Val:")
-        test_c_score = evaluate_estimators(estimator, X_valid, y_valid, plot=False, print_coef=False)
+        test_c_score = evaluate_estimators(estimator, X_valid, y_valid, plot=True, print_coef=False)
 
         return train_c_score, test_c_score, estimator
 
