@@ -31,11 +31,10 @@ def evaluate_regressors_rmsle(regressors, X, y):
 
 
 def evaluate_estimators(estimator, X, y, plot=True, print_coef=False):
-    # prediction = estimator.predict(X)
+    # prediction = model.predict(X)
     # result = concordance_index_censored([i for i, _ in y], [i for _, i in y], prediction)
 
     c_score = estimator.score(X, y)
-    print("Estimator C-Score", c_score)
 
     def fit_and_score_features(X, y):
         n_features = X.shape[1]
@@ -79,7 +78,7 @@ def plot_kaplan(status, time):
 
     time, survival_prob = kaplan_meier_estimator(status, [i for _, i in time])
     plt.step(time, survival_prob, where="post")
-    plt.title("Kaplan-Meier estimator")
+    plt.title("Kaplan-Meier model")
     plt.ylabel("est. probability of survival $\hat{S}(t)$")
     plt.xlabel("time $t$")
     plt.ylim([0, 1])

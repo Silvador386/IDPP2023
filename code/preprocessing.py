@@ -44,37 +44,36 @@ def preprocess(merged_df):
                           'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom', 'supratentorial_symptom',
                           "other_symptoms"
                           ]
-    for feature in features_to_encode:
-        merged_df = df_one_hot_encode(merged_df, feature, drop_org=True)
+    # for feature in features_to_encode:
+    #     merged_df = df_one_hot_encode(merged_df, feature, drop_org=True)
 
-    ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
-                   "delta_evoked_potential_time0", "delta_relapse_time0"]
-
-    merged_df = create_ts_features(merged_df, ts_features, drop_original=True)
-
-    target_features = ['outcome_occurred', 'outcome_time']
-    unfinished_features = list(set(ALL_FEATURES).difference([*features_to_encode, *ts_features, *target_features]))
-    cols_to_drop = []
-    for un_feat in unfinished_features:
-        cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
-    merged_df = merged_df.drop(cols_to_drop, axis=1)
-    # merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
+    # ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician""delta_edss_time0", "potential_value",
+    #                "delta_evoked_potential_time0", "delta_relapse_time0"]
+    #
+    # merged_df = create_ts_features(merged_df, ts_features, drop_original=True)
+    #
+    # target_features = ['outcome_occurred', 'outcome_time']
+    # unfinished_features = list(set(ALL_FEATURES).difference([*features_to_encode, *ts_features, *target_features]))
+    # cols_to_drop = []
+    # for un_feat in unfinished_features:
+    #     cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
+    # merged_df = merged_df.drop(cols_to_drop, axis=1)
+    merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
 
     return merged_df
 
 
-def fastai_splits(df):
-
-    # TODO add option to add outcome_time/outcome_occurred_depending on the preceding calculation
-
+def fastai_splits_original(df):
     col_value_types = {"bool": ['ms_in_pediatric_age', 'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom',
                                 'supratentorial_symptom'],
                        "int32": ['new_or_enlarged_lesions_T2_5+', 'number_of_new_or_enlarged_lesions_T2_5+',
-                                 'altered_potential_9+', 'potential_value_9+', 'delta_relapse_time0_3+', 'mri_area_label_6+',
-                                 'delta_mri_time0_6+', 'lesions_T1_3+', 'lesions_T2_3+', 'delta_evoked_potential_time0_9+',
+                                 'altered_potential_9+', 'potential_value_9+', 'delta_relapse_time0_3+',
+                                 'mri_area_label_6+',
+                                 'delta_mri_time0_6+', 'lesions_T1_3+', 'lesions_T2_3+',
+                                 'delta_evoked_potential_time0_9+',
                                  'lesions_T1_gadolinium_5+', 'number_of_lesions_T1_gadolinium_6+',
                                  'edss_as_evaluated_by_clinician_11+',
-                                  'location_9+',
+                                 'location_9+',
                                  'delta_edss_time0_10+',
                                  'number_of_total_lesions_T2_3+'],
                        "int64": ['age_at_onset', 'time_since_onset'],
@@ -84,61 +83,69 @@ def fastai_splits(df):
                                    'number_of_lesions_T1_gadolinium_03', 'number_of_lesions_T1_gadolinium_04',
                                    'number_of_lesions_T1_gadolinium_05', 'number_of_new_or_enlarged_lesions_T2_01',
                                    'number_of_new_or_enlarged_lesions_T2_02', 'number_of_new_or_enlarged_lesions_T2_03',
-                                   'number_of_new_or_enlarged_lesions_T2_04', 'delta_mri_time0_01', 'delta_mri_time0_02',
+                                   'number_of_new_or_enlarged_lesions_T2_04', 'delta_mri_time0_01',
+                                   'delta_mri_time0_02',
                                    'delta_mri_time0_03', 'delta_mri_time0_04', 'delta_mri_time0_05',
                                    'delta_evoked_potential_time0_01', 'delta_evoked_potential_time0_02',
                                    'delta_evoked_potential_time0_03', 'delta_evoked_potential_time0_04',
                                    'delta_evoked_potential_time0_05', 'delta_evoked_potential_time0_06',
                                    'delta_evoked_potential_time0_07', 'delta_evoked_potential_time0_08',
-                                   #'edss_as_evaluated_by_clinician_01',
+                                   'edss_as_evaluated_by_clinician_01',
                                    'edss_as_evaluated_by_clinician_02',
                                    'edss_as_evaluated_by_clinician_03', 'edss_as_evaluated_by_clinician_04',
                                    'edss_as_evaluated_by_clinician_05', 'edss_as_evaluated_by_clinician_06',
                                    'edss_as_evaluated_by_clinician_07', 'edss_as_evaluated_by_clinician_08',
                                    'edss_as_evaluated_by_clinician_09', 'edss_as_evaluated_by_clinician_10',
-                                   #'delta_edss_time0_01',
+                                   'delta_edss_time0_01',
                                    'delta_edss_time0_02', 'delta_edss_time0_03',
                                    'delta_edss_time0_04', 'delta_edss_time0_05', 'delta_edss_time0_06',
                                    'delta_edss_time0_07', 'delta_edss_time0_08', 'delta_edss_time0_09'],
                        "object": ['sex', 'residence_classification', 'ethnicity', 'other_symptoms', 'centre',
                                   'multiple_sclerosis_type_01', 'multiple_sclerosis_type_02', 'mri_area_label_01',
                                   'mri_area_label_02', 'mri_area_label_03', 'mri_area_label_04', 'mri_area_label_05',
-                                  'lesions_T1_01', 'lesions_T1_02', 'lesions_T1_gadolinium_01', 'lesions_T1_gadolinium_02',
+                                  'lesions_T1_01', 'lesions_T1_02', 'lesions_T1_gadolinium_01',
+                                  'lesions_T1_gadolinium_02',
                                   'new_or_enlarged_lesions_T2_01', 'new_or_enlarged_lesions_T2_02',
                                   'new_or_enlarged_lesions_T2_03', 'new_or_enlarged_lesions_T2_04', 'lesions_T2_01',
                                   'lesions_T2_02', 'number_of_total_lesions_T2_01', 'number_of_total_lesions_T2_02',
                                   'altered_potential_01', 'altered_potential_02', 'altered_potential_03',
                                   'altered_potential_04', 'altered_potential_05', 'altered_potential_06',
-                                  'altered_potential_07', 'altered_potential_08', 'potential_value_01', 'potential_value_02',
-                                  'potential_value_03', 'potential_value_04', 'potential_value_05', 'potential_value_06',
-                                  'potential_value_07', 'potential_value_08', 'location_01',  'location_02', 'location_03',
+                                  'altered_potential_07', 'altered_potential_08', 'potential_value_01',
+                                  'potential_value_02',
+                                  'potential_value_03', 'potential_value_04', 'potential_value_05',
+                                  'potential_value_06',
+                                  'potential_value_07', 'potential_value_08', 'location_01', 'location_02',
+                                  'location_03',
                                   'location_04', 'location_05', 'location_06', 'location_07', 'location_08'
                                   ]
                        }
+
+    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
+    cont_names = [*col_value_types["int32"], *col_value_types["int64"], *col_value_types["float64"]]
+
+
+    splits = RandomSplitter(valid_pct=0.2)(range_of(df))
+    return cat_names, cont_names, splits
+
+def fastai_splits(df):
+
+    # TODO add option to add outcome_time/outcome_occurred_depending on the preceding calculation
+
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-    cat_names = [ *col_value_types["object"]]
-    cont_names = [*col_value_types["int64"], *col_value_types["float64"]# 'diagnostic_delay',
-                  # # 'edss_as_evaluated_by_clinician_01', #'edss_as_evaluated_by_clinician_02',
-                  # 'edss_as_evaluated_by_clinician_03', 'edss_as_evaluated_by_clinician_04',
-                  # 'edss_as_evaluated_by_clinician_05', 'edss_as_evaluated_by_clinician_06',
-                  # 'edss_as_evaluated_by_clinician_07', 'edss_as_evaluated_by_clinician_08',
-                  # 'edss_as_evaluated_by_clinician_09', 'edss_as_evaluated_by_clinician_10',
-                  # 'delta_edss_time0_01',# 'delta_edss_time0_02', 'delta_edss_time0_03',
-                  # 'delta_edss_time0_04', 'delta_edss_time0_05', 'delta_edss_time0_06',
-                  # 'delta_edss_time0_07', 'delta_edss_time0_08', 'delta_edss_time0_09'
+    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
+    cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
 
-                  ]
-
-    # cont_names = cont_names.copy().remove(remove_feature)
+    cont_names.remove("outcome_occurred")
+    cont_names.remove("outcome_time")
 
     splits = RandomSplitter(valid_pct=0.2)(range_of(df))
     return cat_names, cont_names, splits
 
 
 def fastai_tab(df, cat_names, cont_names, y_names, splits):
-    to = TabularPandas(df, procs=[Categorify, FillMissing],
+    to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
                        cat_names=cat_names,
                        cont_names=cont_names,
                        y_names=("outcome_occurred", "outcome_time"),
@@ -146,6 +153,7 @@ def fastai_tab(df, cat_names, cont_names, y_names, splits):
 
     X_train, y_train = to.train.xs, to.train.ys.values.ravel()
     X_valid, y_valid = to.valid.xs, to.valid.ys.values.ravel()
+
 
     return X_train, y_train, X_valid, y_valid
 
