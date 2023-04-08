@@ -63,7 +63,7 @@ def preprocess(merged_df):
     return merged_df
 
 
-def fastai_splits_original(df):
+def fastai_ccnames_original(df, valid_pct=0.2):
     col_value_types = {"bool": ['ms_in_pediatric_age', 'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom',
                                 'supratentorial_symptom'],
                        "int32": ['new_or_enlarged_lesions_T2_5+', 'number_of_new_or_enlarged_lesions_T2_5+',
@@ -119,15 +119,24 @@ def fastai_splits_original(df):
                                   'location_04', 'location_05', 'location_06', 'location_07', 'location_08'
                                   ]
                        }
+    col_value_types = df.columns.to_series().groupby(df.dtypes).groups
+
+    col_value_types = {f"{key}": value for key, value in col_value_types.items()}
 
     cat_names = [*col_value_types["bool"], *col_value_types["object"]]
-    cont_names = [*col_value_types["int32"], *col_value_types["int64"], *col_value_types["float64"]]
+    cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
+    cont_names.remove("outcome_occurred")
+    cont_names.remove("outcome_time")
+
+    return cat_names, cont_names
 
 
-    splits = RandomSplitter(valid_pct=0.2)(range_of(df))
-    return cat_names, cont_names, splits
+def splits_strategy(df, valid_pct):
+    splits = RandomSplitter(valid_pct=valid_pct)(range_of(df))
+    return splits
 
-def fastai_splits(df):
+
+def fastai_ccnames(df):
 
     # TODO add option to add outcome_time/outcome_occurred_depending on the preceding calculation
 
@@ -140,8 +149,7 @@ def fastai_splits(df):
     cont_names.remove("outcome_occurred")
     cont_names.remove("outcome_time")
 
-    splits = RandomSplitter(valid_pct=0.2)(range_of(df))
-    return cat_names, cont_names, splits
+    return cat_names, cont_names
 
 
 def fastai_tab(df, cat_names, cont_names, y_names, splits):
@@ -154,15 +162,20 @@ def fastai_tab(df, cat_names, cont_names, y_names, splits):
     X_train, y_train = to.train.xs, to.train.ys.values.ravel()
     X_valid, y_valid = to.valid.xs, to.valid.ys.values.ravel()
 
+    def y_to_struct_array(y, dtype):
+        y = np.array(
+            [(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y[::2], y[1::2])],
+            dtype=dtype)
+        return y
+
+    struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
+    y_train = y_to_struct_array(y_train, dtype=struct_dtype)
+    y_valid = y_to_struct_array(y_valid, dtype=struct_dtype)
 
     return X_train, y_train, X_valid, y_valid
 
 
-def y_to_struct_array(y, dtype):
-    y = np.array(
-        [(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y[::2], y[1::2])],
-        dtype=dtype)
-    return y
+
 
 def collapse_cols(df, feats_to_be_collapsed):
 
