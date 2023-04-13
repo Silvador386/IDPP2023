@@ -3,6 +3,7 @@ import numpy as np
 from fastai.tabular.all import RandomSplitter, range_of, TabularPandas,\
     Categorify, FillMissing, Normalize, CategoryBlock
 
+from time_window_functions import count_not_nan, mode_wrapper
 
 ALL_FEATURES = ['patient_id', 'sex', 'residence_classification', 'ethnicity',
                 'ms_in_pediatric_age', 'age_at_onset', 'diagnostic_delay',
@@ -37,7 +38,6 @@ feats_to_be_collapsed = [("new_or_enlarged_lesions_T2", 5, None),
 
 
 def preprocess(merged_df):
-    supported_funcs = {"len": len, "min": np.min, "max": np.max, "sum": np.sum, "avg": np.average}
     merged_df = merged_df.copy()
 
     features_to_encode = ["sex", "residence_classification", "ethnicity", 'ms_in_pediatric_age', "centre",
@@ -49,24 +49,34 @@ def preprocess(merged_df):
 
     ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
                    "delta_evoked_potential_time0", "delta_relapse_time0"]
-    #
-    # merged_df = create_ts_features(merged_df, ts_features, drop_original=False)
 
     available_functions = {"mean": np.nanmean,
                            "std": np.nanstd,
                            "median": np.nanmedian,
+                           "mode": mode_wrapper
                            }
 
-    time_windows = [(-730, -365), (-365, -183), (-182, 0), (-730, 0), (-365, 0)]
+    # time_windows = [(-730, -365), (-365, -183), (-182, 0), (-730, 0), (-365, 0)]
+    time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183), (-1095, 0), (-730, 0), (-549, 0), (-365, 0), (-183, 0)]
 
     merged_df = create_tw_features(merged_df, "edss_as_evaluated_by_clinician", "delta_edss_time0", available_functions,
                                    time_windows, drop_original=True)
 
+    merged_df = create_tw_features(merged_df, "potential_value", "delta_evoked_potential_time0",
+                                   {"sum": np.nansum}, time_windows, drop_original=True)
+
+    # merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",  # Worsens score
+    #                                {"enum": count_not_nan}, time_windows, drop_original=True)
+
     target_features = ['outcome_occurred', 'outcome_time']
+
     merged_df = merged_df.set_index("patient_id")
 
     features_to_leave = [*features_to_encode, *ts_features, *target_features,
-                         "patient_id", "time_since_onset", "diagnostic_delay"]
+                         "patient_id", "time_since_onset", "diagnostic_delay",
+                         'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
+
+                         ]
 
     unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
     cols_to_drop = []
@@ -74,7 +84,7 @@ def preprocess(merged_df):
         cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
     merged_df = merged_df.drop(cols_to_drop, axis=1)
 
-    # merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
+    merged_df = collapse_cols(merged_df, [("delta_relapse_time0", 6, None)])
     return merged_df
 
 
@@ -212,32 +222,6 @@ def collapse_cols(df, feats_to_be_collapsed):
     return df
 
 
-def create_ts_features(df, features, drop_original=False):
-    # df = df.copy()
-    funcs = {"len": len,
-             # "max": np.max,
-             # "min": np.min,
-             # "sum": np.sum,
-             "avg": np.average,
-             "median": np.median,
-             # "mod": ,
-             "std": np.std}
-    for feature in features:
-        col_names = select_same_feature_col_names(df, feature)
-
-        new_dfs = []
-        for f_name, func in funcs.items():
-            new_features_df = df_ts_func(df, col_names, func, f_name, new_feature_name=feature)
-            new_dfs.append(new_features_df)
-
-        df = pd.concat([df, *new_dfs], axis=1)
-
-        if drop_original:
-            df = df.drop(col_names, axis=1)
-
-    return df
-
-
 def select_same_feature_col_names(df, feature) -> list:
     return [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
 
@@ -248,18 +232,6 @@ def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
     if drop_org:
         res = res.drop(feature_to_encode, axis=1)
     return res
-
-
-def df_ts_func(df, feature_cols, func, func_name, new_feature_name):
-    calculated_values = []
-    for index, ts_row in df[feature_cols].iterrows():
-        ts_row = ts_row.dropna()
-        if ts_row.empty:
-            calculated_values.append(None)
-        else:
-            calculated_values.append(func(ts_row))
-    out = {f"{new_feature_name}_{func_name}": calculated_values}
-    return pd.DataFrame(out)
 
 
 def create_tw_features(df, feature, time_feature, functions, time_windows, drop_original=False):
@@ -293,5 +265,3 @@ def select_time_window_values(df, feature_cols, time_feature_cols, start_time=0,
     selected_values = np.where(time_mask, feature_matrix, np.nan)
 
     return selected_values
-
-
