@@ -12,7 +12,7 @@ from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import clr_acc, evaluate_regressors_rmsle, evaluate_estimators
 from surestimators import init_surv_estimators
-from sklearn.model_selection import StratifiedKFold, GroupKFold
+from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit
 
 from sksurv.linear_model import CoxPHSurvivalAnalysis
 from sklearn import set_config
@@ -47,29 +47,26 @@ class IDPPPipeline:
         self.predict_output_naive(best_estimator, self.merged_df)
 
     def run_model(self, model):
-        splits = splits_strategy(self.merged_df, 0.2)
+        splits = splits_strategy(self.merged_df, 0.0)
         cat_names, cont_names = fastai_ccnames_original(self.merged_df)
 
-        X_train, y_train, X_valid, y_valid = fastai_tab(self.merged_df, cat_names, cont_names,
+        X_train0, y_train0, X_valid, y_valid = fastai_tab(self.merged_df, cat_names, cont_names,
                                                         "outcome_occurred", splits=splits)
 
         avg_scores ={"train": [], "test": []}
-        # for splits in (StratifiedKFold(n_splits=5,
-        #                                shuffle=False,)
-        #         .split(self.merged_df, self.merged_df["outcome_occurred"])):
-        #
-        #     splits = (splits[0].tolist(), splits[1].tolist())
-        #
-        #     X_train, y_train, X_valid, y_valid = X_train0.iloc[splits[0]], y_train0[splits[0]],\
-        #                                          X_train0.iloc[splits[1]], y_train0[splits[1]]
+        gss = GroupShuffleSplit(n_splits=1, train_size=0.8, random_state=43)
+        for i, (train_idx, test_idx) in enumerate(gss.split(X_train0, y_train0, groups=self.merged_df[["outcome_occurred"]])):
 
-        model.fit(X_train, y_train)
+            X_train, y_train, X_valid, y_valid = X_train0.iloc[train_idx], y_train0[train_idx],\
+                                                 X_train0.iloc[test_idx], y_train0[test_idx]
 
-        train_c_score = evaluate_estimators(model, X_train, y_train, plot=False)
-        test_c_score = evaluate_estimators(model, X_valid, y_valid, plot=False, print_coef=False)
-        avg_scores["train"].append(train_c_score)
-        avg_scores["test"].append(test_c_score)
 
+            model.fit(X_train, y_train)
+
+            train_c_score = evaluate_estimators(model, X_train, y_train, plot=False)
+            test_c_score = evaluate_estimators(model, X_valid, y_valid, plot=False, print_coef=False)
+            avg_scores["train"].append(train_c_score)
+            avg_scores["test"].append(test_c_score)
 
         return np.average(np.array(avg_scores["train"])), np.average(np.array(avg_scores["test"])), model
 
@@ -107,7 +104,7 @@ class IDPPPipeline:
 
 
 def main():
-    DATASET = "datasetA"
+    DATASET = "datasetB"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 

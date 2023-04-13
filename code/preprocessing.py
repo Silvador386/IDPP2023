@@ -44,15 +44,20 @@ def preprocess(merged_df):
                           'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom', 'supratentorial_symptom',
                           "other_symptoms"
                           ]
-    # for feature in features_to_encode:
-    #     merged_df = df_one_hot_encode(merged_df, feature, drop_org=True)
+    # for feature_cols in features_to_encode:
+    #     merged_df = df_one_hot_encode(merged_df, feature_cols, drop_org=True)
 
-    ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician""delta_edss_time0", "potential_value",
+    ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
                    "delta_evoked_potential_time0", "delta_relapse_time0"]
 
-    merged_df = create_ts_features(merged_df, ts_features, drop_original=False)
+    # merged_df = create_ts_features(merged_df, ts_features, drop_original=False)
 
     target_features = ['outcome_occurred', 'outcome_time']
+
+    df_time_window_ts(merged_df, select_same_feature_col_names(merged_df, "edss_as_evaluated_by_clinician"),
+                      select_same_feature_col_names(merged_df, "delta_edss_time0"), np.average,
+                      start_time=-365, end_time=0,
+                      )
     # unfinished_features = list(set(ALL_FEATURES).difference([*features_to_encode, *ts_features, *target_features]))
     # cols_to_drop = []
     # for un_feat in unfinished_features:
@@ -124,7 +129,7 @@ def fastai_ccnames_original(df):
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
 
-    cat_names = [*col_value_types["bool"], 'sex', 'residence_classification', 'ethnicity', 'other_symptoms', 'centre']
+    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
     cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
     cont_names.remove("outcome_occurred")
     cont_names.remove("outcome_time")
@@ -228,9 +233,6 @@ def select_same_feature_col_names(df, feature) -> list:
     return [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
 
 
-
-
-
 def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
     dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int64)
     res = pd.concat([original_dataframe, dummies], axis=1)
@@ -239,9 +241,9 @@ def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
     return res
 
 
-def df_ts_func(df, feature, func, func_name, new_feature_name):
+def df_ts_func(df, feature_cols, func, func_name, new_feature_name):
     calculated_values = []
-    for index, ts_row in df[feature].iterrows():
+    for index, ts_row in df[feature_cols].iterrows():
         ts_row = ts_row.dropna()
         if ts_row.empty:
             calculated_values.append(None)
@@ -251,5 +253,26 @@ def df_ts_func(df, feature, func, func_name, new_feature_name):
     return pd.DataFrame(out)
 
 
-def df_normalize_col(df, feature):
-    pass
+def df_time_window_ts(df, feature_cols, time_feature_cols, func, start_time=0, end_time=0):
+    calculated_values = []
+    _features = df[feature_cols].transpose()
+    _time_vals = df[time_feature_cols].transpose()
+    for values_idx, times_idx in zip(_features.columns, _time_vals.columns):
+        value_row = _features[values_idx].dropna().to_numpy()
+        time_row = _time_vals[times_idx].dropna().to_numpy()
+        time_mask = (start_time <= time_row) & (time_row <= end_time)
+
+        if len(value_row) != len(time_row):
+            print(value_row)
+            print(time_row)
+            continue
+        values_in_time_window = value_row[time_mask]
+        if any(values_in_time_window):
+            calculated_values.append(func(values_in_time_window))
+        else:
+            calculated_values.append(None)
+
+    out = {f"edds_1year": calculated_values}
+    print(out)
+    return pd.DataFrame(out)
+
