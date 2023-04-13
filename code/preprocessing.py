@@ -49,23 +49,32 @@ def preprocess(merged_df):
 
     ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
                    "delta_evoked_potential_time0", "delta_relapse_time0"]
-
+    #
     # merged_df = create_ts_features(merged_df, ts_features, drop_original=False)
 
+    available_functions = {"mean": np.nanmean,
+                           "std": np.nanstd,
+                           "median": np.nanmedian,
+                           }
+
+    time_windows = [(-730, -365), (-365, -183), (-182, 0), (-730, 0), (-365, 0)]
+
+    merged_df = create_tw_features(merged_df, "edss_as_evaluated_by_clinician", "delta_edss_time0", available_functions,
+                                   time_windows, drop_original=True)
+
     target_features = ['outcome_occurred', 'outcome_time']
+    merged_df = merged_df.set_index("patient_id")
 
-    df_time_window_ts(merged_df, select_same_feature_col_names(merged_df, "edss_as_evaluated_by_clinician"),
-                      select_same_feature_col_names(merged_df, "delta_edss_time0"), np.average,
-                      start_time=-365, end_time=0,
-                      )
-    # unfinished_features = list(set(ALL_FEATURES).difference([*features_to_encode, *ts_features, *target_features]))
-    # cols_to_drop = []
-    # for un_feat in unfinished_features:
-    #     cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
-    # merged_df = merged_df.drop(cols_to_drop, axis=1)
+    features_to_leave = [*features_to_encode, *ts_features, *target_features,
+                         "patient_id", "time_since_onset", "diagnostic_delay"]
 
-    merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
+    unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
+    cols_to_drop = []
+    for un_feat in unfinished_features:
+        cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
+    merged_df = merged_df.drop(cols_to_drop, axis=1)
 
+    # merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
     return merged_df
 
 
@@ -253,26 +262,36 @@ def df_ts_func(df, feature_cols, func, func_name, new_feature_name):
     return pd.DataFrame(out)
 
 
-def df_time_window_ts(df, feature_cols, time_feature_cols, func, start_time=0, end_time=0):
-    calculated_values = []
-    _features = df[feature_cols].transpose()
-    _time_vals = df[time_feature_cols].transpose()
-    for values_idx, times_idx in zip(_features.columns, _time_vals.columns):
-        value_row = _features[values_idx].dropna().to_numpy()
-        time_row = _time_vals[times_idx].dropna().to_numpy()
-        time_mask = (start_time <= time_row) & (time_row <= end_time)
+def create_tw_features(df, feature, time_feature, functions, time_windows, drop_original=False):
+    feature_cols = select_same_feature_col_names(df, feature)
+    time_cols = select_same_feature_col_names(df, time_feature)
 
-        if len(value_row) != len(time_row):
-            print(value_row)
-            print(time_row)
-            continue
-        values_in_time_window = value_row[time_mask]
-        if any(values_in_time_window):
-            calculated_values.append(func(values_in_time_window))
-        else:
-            calculated_values.append(None)
+    output_features = {}
+    for (start_time, end_time) in time_windows:
+        selected_values = select_time_window_values(df, feature_cols, time_cols, start_time, end_time)
 
-    out = {f"edds_1year": calculated_values}
-    print(out)
-    return pd.DataFrame(out)
+        for func_name, func in functions.items():
+            calculated_values = np.apply_along_axis(func, 1, selected_values)
+            new_feature_name = f"{feature}_({start_time}_{end_time})_{func_name}"
+            output_features[new_feature_name] = calculated_values
+
+    new_df = pd.DataFrame(output_features)
+    output_df = pd.concat([df, new_df], axis=1)
+
+    if drop_original:
+        output_df = output_df.drop([*feature_cols, *time_cols], axis=1)
+
+    return output_df
+
+
+def select_time_window_values(df, feature_cols, time_feature_cols, start_time=0, end_time=0):
+    feature_matrix = df[feature_cols].to_numpy()
+    time_values_matrix = df[time_feature_cols].to_numpy()
+
+    time_mask = (start_time <= time_values_matrix) & (time_values_matrix <= end_time)
+
+    selected_values = np.where(time_mask, feature_matrix, np.nan)
+
+    return selected_values
+
 

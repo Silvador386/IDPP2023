@@ -48,7 +48,7 @@ class IDPPPipeline:
 
     def run_model(self, model):
         splits = splits_strategy(self.merged_df, 0.0)
-        cat_names, cont_names = fastai_ccnames_original(self.merged_df)
+        cat_names, cont_names = fastai_ccnames(self.merged_df)
 
         X_train0, y_train0, X_valid, y_valid = fastai_tab(self.merged_df, cat_names, cont_names,
                                                         "outcome_occurred", splits=splits)
@@ -90,12 +90,12 @@ class IDPPPipeline:
 
     def predict_output_naive(self, best_model, df):
         splits = splits_strategy(df, valid_pct=0)
-        cat_names, cont_names = fastai_ccnames_original(df)
+        cat_names, cont_names = fastai_ccnames(df)
         X_train, y_train, X_valid, y_valid = fastai_tab(df, cat_names, cont_names, "", splits)
 
         prediction_scores = best_model.predict(X_train)  # TODO Find out how to scale scores to fit in <0, 1 interval
 
-        pred_output = {self.id_feature: df[self.id_feature],
+        pred_output = {self.id_feature: df.index,
                        "predictions": prediction_scores,
                        "run": self.TEAM_SHORTCUT}
 
@@ -104,7 +104,7 @@ class IDPPPipeline:
 
 
 def main():
-    DATASET = "datasetB"
+    DATASET = "datasetA"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 
