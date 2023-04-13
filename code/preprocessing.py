@@ -47,23 +47,24 @@ def preprocess(merged_df):
     # for feature in features_to_encode:
     #     merged_df = df_one_hot_encode(merged_df, feature, drop_org=True)
 
-    # ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician""delta_edss_time0", "potential_value",
-    #                "delta_evoked_potential_time0", "delta_relapse_time0"]
-    #
-    # merged_df = create_ts_features(merged_df, ts_features, drop_original=True)
-    #
-    # target_features = ['outcome_occurred', 'outcome_time']
+    ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician""delta_edss_time0", "potential_value",
+                   "delta_evoked_potential_time0", "delta_relapse_time0"]
+
+    merged_df = create_ts_features(merged_df, ts_features, drop_original=False)
+
+    target_features = ['outcome_occurred', 'outcome_time']
     # unfinished_features = list(set(ALL_FEATURES).difference([*features_to_encode, *ts_features, *target_features]))
     # cols_to_drop = []
     # for un_feat in unfinished_features:
     #     cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
     # merged_df = merged_df.drop(cols_to_drop, axis=1)
+
     merged_df = collapse_cols(merged_df, feats_to_be_collapsed)
 
     return merged_df
 
 
-def fastai_ccnames_original(df, valid_pct=0.2):
+def fastai_ccnames_original(df):
     col_value_types = {"bool": ['ms_in_pediatric_age', 'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom',
                                 'supratentorial_symptom'],
                        "int32": ['new_or_enlarged_lesions_T2_5+', 'number_of_new_or_enlarged_lesions_T2_5+',
@@ -123,7 +124,7 @@ def fastai_ccnames_original(df, valid_pct=0.2):
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
 
-    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
+    cat_names = [*col_value_types["bool"], 'sex', 'residence_classification', 'ethnicity', 'other_symptoms', 'centre']
     cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
     cont_names.remove("outcome_occurred")
     cont_names.remove("outcome_time")
@@ -131,8 +132,9 @@ def fastai_ccnames_original(df, valid_pct=0.2):
     return cat_names, cont_names
 
 
-def splits_strategy(df, valid_pct):
+def splits_strategy(df, valid_pct, use_Kfold=True):
     splits = RandomSplitter(valid_pct=valid_pct)(range_of(df))
+
     return splits
 
 
@@ -175,12 +177,10 @@ def fastai_tab(df, cat_names, cont_names, y_names, splits):
     return X_train, y_train, X_valid, y_valid
 
 
-
-
 def collapse_cols(df, feats_to_be_collapsed):
 
     def collapse_ts_feature_cols(df, feature, start_idx, end_idx=None):
-        selected_cols = [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
+        selected_cols = [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature) and col_name[-2:].isdigit()]
         if end_idx:
             cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:] < end_idx))]
             new_feat_name = f"{feature}_{start_idx}-{end_idx}"
@@ -201,10 +201,12 @@ def collapse_cols(df, feats_to_be_collapsed):
 def create_ts_features(df, features, drop_original=False):
     # df = df.copy()
     funcs = {"len": len,
-             "max": np.max,
-             "min": np.min,
-             "sum": np.sum,
+             # "max": np.max,
+             # "min": np.min,
+             # "sum": np.sum,
              "avg": np.average,
+             "median": np.median,
+             # "mod": ,
              "std": np.std}
     for feature in features:
         col_names = select_same_feature_col_names(df, feature)
