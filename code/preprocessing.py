@@ -62,8 +62,13 @@ def preprocess(merged_df):
     merged_df = create_tw_features(merged_df, "edss_as_evaluated_by_clinician", "delta_edss_time0", available_functions,
                                    time_windows, drop_original=True)
 
-    merged_df = create_tw_features(merged_df, "potential_value", "delta_evoked_potential_time0",
-                                   {"sum": np.nansum}, time_windows, drop_original=True)
+    # time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183),  (-182, 0)]
+    merged_df = preprocess_evoked_potentials(merged_df, ['altered_potential', 'potential_value', 'location'],
+                                 'delta_evoked_potential_time0', time_windows, drop_original=True)
+
+    # merged_df = create_tw_features(merged_df, "potential_value", "delta_evoked_potential_time0",
+    #                                {"sum": np.nansum}, time_windows, drop_original=True)
+
 
     # merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",  # Worsens score
     #                                {"enum": count_not_nan}, time_windows, drop_original=True)
@@ -75,7 +80,7 @@ def preprocess(merged_df):
     features_to_leave = [*features_to_encode, *ts_features, *target_features,
                          "patient_id", "time_since_onset", "diagnostic_delay",
                          'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
-
+                         # "altered_potential"
                          ]
 
     unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
@@ -84,76 +89,8 @@ def preprocess(merged_df):
         cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
     merged_df = merged_df.drop(cols_to_drop, axis=1)
 
-    merged_df = collapse_cols(merged_df, [("delta_relapse_time0", 6, None)])
+    merged_df = collapse_cols_as_occurrence_sum(merged_df, [("delta_relapse_time0", 6, None)])
     return merged_df
-
-
-def fastai_ccnames_original(df):
-    col_value_types = {"bool": ['ms_in_pediatric_age', 'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom',
-                                'supratentorial_symptom'],
-                       "int32": ['new_or_enlarged_lesions_T2_5+', 'number_of_new_or_enlarged_lesions_T2_5+',
-                                 'altered_potential_9+', 'potential_value_9+', 'delta_relapse_time0_3+',
-                                 'mri_area_label_6+',
-                                 'delta_mri_time0_6+', 'lesions_T1_3+', 'lesions_T2_3+',
-                                 'delta_evoked_potential_time0_9+',
-                                 'lesions_T1_gadolinium_5+', 'number_of_lesions_T1_gadolinium_6+',
-                                 'edss_as_evaluated_by_clinician_11+',
-                                 'location_9+',
-                                 'delta_edss_time0_10+',
-                                 'number_of_total_lesions_T2_3+'],
-                       "int64": ['age_at_onset', 'time_since_onset'],
-                       "float64": ['diagnostic_delay', 'delta_relapse_time0_01', 'delta_relapse_time0_02',
-                                   'delta_observation_time0_01', 'delta_observation_time0_02',
-                                   'number_of_lesions_T1_gadolinium_01', 'number_of_lesions_T1_gadolinium_02',
-                                   'number_of_lesions_T1_gadolinium_03', 'number_of_lesions_T1_gadolinium_04',
-                                   'number_of_lesions_T1_gadolinium_05', 'number_of_new_or_enlarged_lesions_T2_01',
-                                   'number_of_new_or_enlarged_lesions_T2_02', 'number_of_new_or_enlarged_lesions_T2_03',
-                                   'number_of_new_or_enlarged_lesions_T2_04', 'delta_mri_time0_01',
-                                   'delta_mri_time0_02',
-                                   'delta_mri_time0_03', 'delta_mri_time0_04', 'delta_mri_time0_05',
-                                   'delta_evoked_potential_time0_01', 'delta_evoked_potential_time0_02',
-                                   'delta_evoked_potential_time0_03', 'delta_evoked_potential_time0_04',
-                                   'delta_evoked_potential_time0_05', 'delta_evoked_potential_time0_06',
-                                   'delta_evoked_potential_time0_07', 'delta_evoked_potential_time0_08',
-                                   'edss_as_evaluated_by_clinician_01',
-                                   'edss_as_evaluated_by_clinician_02',
-                                   'edss_as_evaluated_by_clinician_03', 'edss_as_evaluated_by_clinician_04',
-                                   'edss_as_evaluated_by_clinician_05', 'edss_as_evaluated_by_clinician_06',
-                                   'edss_as_evaluated_by_clinician_07', 'edss_as_evaluated_by_clinician_08',
-                                   'edss_as_evaluated_by_clinician_09', 'edss_as_evaluated_by_clinician_10',
-                                   'delta_edss_time0_01',
-                                   'delta_edss_time0_02', 'delta_edss_time0_03',
-                                   'delta_edss_time0_04', 'delta_edss_time0_05', 'delta_edss_time0_06',
-                                   'delta_edss_time0_07', 'delta_edss_time0_08', 'delta_edss_time0_09'],
-                       "object": ['sex', 'residence_classification', 'ethnicity', 'other_symptoms', 'centre',
-                                  'multiple_sclerosis_type_01', 'multiple_sclerosis_type_02', 'mri_area_label_01',
-                                  'mri_area_label_02', 'mri_area_label_03', 'mri_area_label_04', 'mri_area_label_05',
-                                  'lesions_T1_01', 'lesions_T1_02', 'lesions_T1_gadolinium_01',
-                                  'lesions_T1_gadolinium_02',
-                                  'new_or_enlarged_lesions_T2_01', 'new_or_enlarged_lesions_T2_02',
-                                  'new_or_enlarged_lesions_T2_03', 'new_or_enlarged_lesions_T2_04', 'lesions_T2_01',
-                                  'lesions_T2_02', 'number_of_total_lesions_T2_01', 'number_of_total_lesions_T2_02',
-                                  'altered_potential_01', 'altered_potential_02', 'altered_potential_03',
-                                  'altered_potential_04', 'altered_potential_05', 'altered_potential_06',
-                                  'altered_potential_07', 'altered_potential_08', 'potential_value_01',
-                                  'potential_value_02',
-                                  'potential_value_03', 'potential_value_04', 'potential_value_05',
-                                  'potential_value_06',
-                                  'potential_value_07', 'potential_value_08', 'location_01', 'location_02',
-                                  'location_03',
-                                  'location_04', 'location_05', 'location_06', 'location_07', 'location_08'
-                                  ]
-                       }
-    col_value_types = df.columns.to_series().groupby(df.dtypes).groups
-
-    col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-
-    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
-    cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
-    cont_names.remove("outcome_occurred")
-    cont_names.remove("outcome_time")
-
-    return cat_names, cont_names
 
 
 def splits_strategy(df, valid_pct, use_Kfold=True):
@@ -169,7 +106,7 @@ def fastai_ccnames(df):
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-    cat_names = [*col_value_types["bool"], *col_value_types["object"]]
+    cat_names = [*col_value_types["bool"], *col_value_types["object"], *col_value_types["int32"]]
     cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
 
     cont_names.remove("outcome_occurred")
@@ -201,7 +138,7 @@ def fastai_tab(df, cat_names, cont_names, y_names, splits):
     return X_train, y_train, X_valid, y_valid
 
 
-def collapse_cols(df, feats_to_be_collapsed):
+def collapse_cols_as_occurrence_sum(df, feats_to_be_collapsed):
 
     def collapse_ts_feature_cols(df, feature, start_idx, end_idx=None):
         selected_cols = [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature) and col_name[-2:].isdigit()]
@@ -265,3 +202,34 @@ def select_time_window_values(df, feature_cols, time_feature_cols, start_time=0,
     selected_values = np.where(time_mask, feature_matrix, np.nan)
 
     return selected_values
+
+
+def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, drop_original=False):
+    features_cols = {feature: select_same_feature_col_names(df, feature) for feature in feature_names}
+
+    time_cols = select_same_feature_col_names(df, time_feature)
+
+    # altered potentials: ["Auditory", "Motor", "Somatosensory", "Visual"]
+    # location: ["left", "lower left", "upper left", "right", "lower right", "upper right"]
+    output_data = {}
+    for (start_time, end_time) in time_windows:
+        selected_data = {feat_name: select_time_window_values(df, feat_cols, time_cols, start_time, end_time) for feat_name, feat_cols in features_cols.items()}
+
+        potential_value = selected_data["potential_value"]
+        altered_potential = selected_data["altered_potential"]
+        location = selected_data["location"]
+        for altered_p_type in ["Auditory", "Motor", "Somatosensory", "Visual"]:
+            mask = altered_potential == altered_p_type
+            potential_value_masked = np.where(mask, potential_value, np.nan)
+            calculated_values = np.apply_along_axis(np.nansum, 1, potential_value_masked)
+            new_feature_name = f"altered_potential_({start_time}_{end_time})_{altered_p_type}"
+            output_data[new_feature_name] = calculated_values
+
+    new_df = pd.DataFrame(output_data)
+    output_df = pd.concat([df, new_df], axis=1)
+
+    if drop_original:
+        output_df = output_df.drop([*[f_name for feature_cols in features_cols.values() for f_name in list(feature_cols)], *time_cols], axis=1)
+
+    return output_df
+

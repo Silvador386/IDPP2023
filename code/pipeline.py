@@ -7,7 +7,7 @@ import seaborn as sns
 
 from read_dfs import read_dfs
 from merge_dfs import merge_dfs
-from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_ccnames_original, splits_strategy
+from preprocessing import preprocess, fastai_ccnames, fastai_tab, splits_strategy
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import clr_acc, evaluate_regressors_rmsle, evaluate_estimators
