@@ -4,7 +4,7 @@ from sksurv.svm import FastKernelSurvivalSVM, HingeLossSurvivalSVM, MinlipSurviv
 from sksurv.linear_model import CoxPHSurvivalAnalysis
 
 def init_surv_estimators():
-    rsf = RandomSurvivalForest(n_estimators=500, min_samples_leaf=7, random_state=0)
+    rsf = RandomSurvivalForest(n_estimators=500, min_samples_leaf=7, random_state=0, n_jobs=-1)
     gbs = GradientBoostingSurvivalAnalysis()
     # msa = MinlipSurvivalAnalysis()
     cgb = ComponentwiseGradientBoostingSurvivalAnalysis()

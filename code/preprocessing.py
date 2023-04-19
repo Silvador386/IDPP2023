@@ -57,7 +57,8 @@ def preprocess(merged_df):
                            }
 
     # time_windows = [(-730, -365), (-365, -183), (-182, 0), (-730, 0), (-365, 0)]
-    time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183), (-1095, 0), (-730, 0), (-549, 0), (-365, 0), (-183, 0)]
+    time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183),
+                    (-1095, 0), (-730, 0), (-549, 0), (-365, 0), (-183, 0)]
 
     merged_df = create_tw_features(merged_df, "edss_as_evaluated_by_clinician", "delta_edss_time0", available_functions,
                                    time_windows, drop_original=True)
@@ -66,12 +67,9 @@ def preprocess(merged_df):
     merged_df = preprocess_evoked_potentials(merged_df, ['altered_potential', 'potential_value', 'location'],
                                  'delta_evoked_potential_time0', time_windows, drop_original=True)
 
-    # merged_df = create_tw_features(merged_df, "potential_value", "delta_evoked_potential_time0",
-    #                                {"sum": np.nansum}, time_windows, drop_original=True)
 
-
-    # merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",  # Worsens score
-    #                                {"enum": count_not_nan}, time_windows, drop_original=True)
+    merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
+                                   {"occ_sum": count_not_nan}, time_windows, drop_original=True)
 
     target_features = ['outcome_occurred', 'outcome_time']
 
@@ -80,7 +78,7 @@ def preprocess(merged_df):
     features_to_leave = [*features_to_encode, *ts_features, *target_features,
                          "patient_id", "time_since_onset", "diagnostic_delay",
                          'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
-                         # "altered_potential"
+                         "altered_potential"
                          ]
 
     unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
@@ -89,7 +87,7 @@ def preprocess(merged_df):
         cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
     merged_df = merged_df.drop(cols_to_drop, axis=1)
 
-    merged_df = collapse_cols_as_occurrence_sum(merged_df, [("delta_relapse_time0", 6, None)])
+    # merged_df = collapse_cols_as_occurrence_sum(merged_df, [("delta_relapse_time0", 6, None)])
     return merged_df
 
 
@@ -106,7 +104,8 @@ def fastai_ccnames(df):
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-    cat_names = [*col_value_types["bool"], *col_value_types["object"], *col_value_types["int32"]]
+    cat_names = [*col_value_types["bool"], *col_value_types["object"], *col_value_types["int32"]
+                 ]
     cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
 
     cont_names.remove("outcome_occurred")

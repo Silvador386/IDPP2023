@@ -13,8 +13,8 @@ from regressors import init_regressors
 from evaluation import clr_acc, evaluate_regressors_rmsle, evaluate_estimators
 from surestimators import init_surv_estimators
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit
-
-from sksurv.linear_model import CoxPHSurvivalAnalysis
+from sksurv.metrics import concordance_index_censored
+from wandbsetup import setup_wandb
 from sklearn import set_config
 
 set_config(display="text")  # displays text representation of estimators
@@ -27,17 +27,19 @@ class IDPPPipeline:
         self.dataset_dir = dataset_dir
         self.dataset_name = dataset_name
         self.id_feature = id_feature
-        self.dfs = None
-        self.merged_df = None
 
-        self.estimators = init_surv_estimators()
-
-    def run(self):
         self.dfs = read_dfs(self.dataset_dir)
         self.merged_df = merge_dfs(self.dfs, self.dataset_name, self.id_feature)
         self.merged_df = preprocess(self.merged_df)
 
-        num_iter = 15
+        self.estimators = init_surv_estimators()
+
+        config = {"column_names": self.merged_df.columns.values}
+        self.wandb_run = setup_wandb(config)
+
+    def run(self):
+
+        num_iter = 3
         for name, models in self.estimators.items():
             print(f"Estimator: {name}")
             train_c_scores, val_c_scores, best_estimator = self.average_c_score(models, num_iter=num_iter)
@@ -45,6 +47,7 @@ class IDPPPipeline:
             print(f"Val   ({num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
 
         self.predict_output_naive(best_estimator, self.merged_df)
+        self.predict_cumulative(best_estimator, self.merged_df)
 
     def run_model(self, model):
         splits = splits_strategy(self.merged_df, 0.0)
@@ -91,17 +94,67 @@ class IDPPPipeline:
     def predict_output_naive(self, best_model, df):
         splits = splits_strategy(df, valid_pct=0)
         cat_names, cont_names = fastai_ccnames(df)
-        X_train, y_train, X_valid, y_valid = fastai_tab(df, cat_names, cont_names, "", splits)
+        X, y, _, _ = fastai_tab(df, cat_names, cont_names, "", splits)
 
-        prediction_scores = best_model.predict(X_train)  # TODO Find out how to scale scores to fit in <0, 1 interval
+        prediction_scores = best_model.predict(X)  # TODO Find out how to scale scores to fit in <0, 1 interval
+        prediction_scores = resize_prediction_score_vec(prediction_scores)
 
         pred_output = {self.id_feature: df.index,
                        "predictions": prediction_scores,
+                       "run": self.TEAM_SHORTCUT}
+        y_occ = [val[0] for val in y]
+        y_time = [val[1] for val in y]
+        print("Predictions C-Index", concordance_index_censored(y_occ, y_time, prediction_scores))
+        pred_df = pd.DataFrame(pred_output)
+        return pred_df
+
+    def predict_cumulative(self, best_model, df):
+        splits = splits_strategy(df, valid_pct=0)
+        cat_names, cont_names = fastai_ccnames(df)
+        X, y, _, _ = fastai_tab(df, cat_names, cont_names, "", splits)
+        pred_surv = best_model.predict_cumulative_hazard_function(X)
+
+        time_points = [2, 4, 6, 8, 10]
+        predictions = []
+        for i, surv_func in enumerate(pred_surv):
+            predictions.append(surv_func(time_points))
+
+
+            plt.step(time_points, surv_func(time_points), where="post",
+                     label="Sample %d" % (i + 1))
+        plt.title("CoxPHSurvival Step functions")
+        plt.ylabel("est. probability of survival $\hat{S}(t)$")
+        plt.xlabel("time $t$")
+        plt.ylim([0, 1])
+        plt.legend(loc="best")
+        plt.show()
+
+        predictions = np.array(predictions)
+
+        predictions = resize_prediction_score_naive(predictions)
+
+        pred_output = {self.id_feature: df.index,
+                       "2years": predictions[:, 0],
+                       "4years": predictions[:, 1],
+                       "6years": predictions[:, 2],
+                       "8years": predictions[:, 3],
+                       "10years": predictions[:, 4],
                        "run": self.TEAM_SHORTCUT}
 
         pred_df = pd.DataFrame(pred_output)
         return pred_df
 
+
+def resize_prediction_score_naive(prediction_scores):
+    min = prediction_scores.min()
+    max = prediction_scores.max()
+    return (prediction_scores - min)/(max-min)
+
+
+def resize_prediction_score_vec(prediction_scores):
+    num_preds = len(prediction_scores)
+    preds = [sum(value > prediction_scores) / num_preds for value in prediction_scores]
+    return np.array(preds)
 
 def main():
     DATASET = "datasetA"
