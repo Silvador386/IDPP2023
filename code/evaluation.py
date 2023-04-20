@@ -54,7 +54,7 @@ def evaluate_cumulative(model, y_train, X_val, y_val, time_points=None, plot=Fal
 
 def resize_pred_scores_by_order(prediction_score):
     element_count = np.prod(prediction_score.shape)
-    vfunc = np.vectorize(lambda x: np.sum(x > prediction_score)/element_count)
+    vfunc = np.vectorize(lambda x: np.sum(x > prediction_score) / element_count)
     resized_predictions = vfunc(prediction_score)
     return resized_predictions
 
@@ -62,7 +62,7 @@ def resize_pred_scores_by_order(prediction_score):
 def resize_prediction_score_naive(prediction_scores):
     min_value = prediction_scores.min()
     max_value = prediction_scores.max()
-    return (prediction_scores - min_value)/(max_value-min_value)
+    return (prediction_scores - min_value) / (max_value - min_value)
 
 
 def clr_acc(models, X_train, y_train, X_valid, y_valid):
@@ -133,7 +133,6 @@ def plot_cox_step_funcs(estimator, X, print_coefs=False):
 
 
 def plot_kaplan(status, time):
-
     time, survival_prob = kaplan_meier_estimator(status, [i for _, i in time])
     plt.step(time, survival_prob, where="post")
     plt.title("Kaplan-Meier model")

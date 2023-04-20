@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from fastai.tabular.all import RandomSplitter, range_of, TabularPandas,\
+from fastai.tabular.all import RandomSplitter, range_of, TabularPandas, \
     Categorify, FillMissing, Normalize, CategoryBlock
 
 from time_window_functions import count_not_nan, mode_wrapper
@@ -20,7 +20,7 @@ ALL_FEATURES = ['patient_id', 'sex', 'residence_classification', 'ethnicity',
                 'number_of_total_lesions_T2', 'delta_mri_time0']
 
 feats_to_be_collapsed = [("new_or_enlarged_lesions_T2", 5, None),
-                         ("number_of_new_or_enlarged_lesions_T2",   5, None),
+                         ("number_of_new_or_enlarged_lesions_T2", 5, None),
                          ("altered_potential", 9, None),
                          ("potential_value", 9, None),
                          ("delta_relapse_time0", 3, None),
@@ -65,8 +65,7 @@ def preprocess(merged_df):
 
     # time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183),  (-182, 0)]
     merged_df = preprocess_evoked_potentials(merged_df, ['altered_potential', 'potential_value', 'location'],
-                                 'delta_evoked_potential_time0', time_windows, drop_original=True)
-
+                                             'delta_evoked_potential_time0', time_windows, drop_original=True)
 
     merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
                                    {"occ_sum": count_not_nan}, time_windows, drop_original=True)
@@ -101,7 +100,6 @@ def fastai_fill_split_xy(df):
 
 
 def fastai_ccnames(df):
-
     # TODO add option to add outcome_time/outcome_occurred_depending on the preceding calculation
 
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
@@ -155,9 +153,9 @@ def fill_missing_edss(df, feature, specific_names, drop_na_all=True):
 
 
 def collapse_cols_as_occurrence_sum(df, feats_to_be_collapsed):
-
     def collapse_ts_feature_cols(df, feature, start_idx, end_idx=None):
-        selected_cols = [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature) and col_name[-2:].isdigit()]
+        selected_cols = [col_name for col_name in df.columns.values.tolist() if
+                         col_name.startswith(feature) and col_name[-2:].isdigit()]
         if end_idx:
             cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:] < end_idx))]
             new_feat_name = f"{feature}_{start_idx}-{end_idx}"
@@ -229,7 +227,8 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
     # location: ["left", "lower left", "upper left", "right", "lower right", "upper right"]
     output_data = {}
     for (start_time, end_time) in time_windows:
-        selected_data = {feat_name: select_time_window_values(df, feat_cols, time_cols, start_time, end_time) for feat_name, feat_cols in features_cols.items()}
+        selected_data = {feat_name: select_time_window_values(df, feat_cols, time_cols, start_time, end_time) for
+                         feat_name, feat_cols in features_cols.items()}
 
         potential_value = selected_data["potential_value"]
         altered_potential = selected_data["altered_potential"]
@@ -244,7 +243,7 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
     output_df = pd.concat([df, new_df], axis=1)
 
     if drop_original:
-        output_df = output_df.drop([*[f_name for feature_cols in features_cols.values() for f_name in list(feature_cols)], *time_cols], axis=1)
+        output_df = output_df.drop(
+            [*[f_name for feature_cols in features_cols.values() for f_name in list(feature_cols)], *time_cols], axis=1)
 
     return output_df
-

@@ -22,7 +22,7 @@ set_config(display="text")  # displays text representation of estimators
 
 class IDPPPipeline:
     TEAM_SHORTCUT = "uwb_T1a_surfRF"
-    num_iter = 3
+    num_iter = 100
     train_size = 0.7
 
     def __init__(self, dataset_dir, dataset_name, id_feature):
@@ -48,7 +48,8 @@ class IDPPPipeline:
         acc, est = [], []
         for name, models in self.estimators.items():
             print(f"Estimator: {name}")
-            train_c_scores, val_c_scores, best_acc, best_estimator = self.average_c_score(models, name, num_iter=self.num_iter)
+            train_c_scores, val_c_scores, best_acc, best_estimator = self.average_c_score(models, name,
+                                                                                          num_iter=self.num_iter)
             acc.append(best_acc)
             est.append(best_estimator)
             print(f"Train ({self.num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
@@ -71,7 +72,7 @@ class IDPPPipeline:
         avg_scores = {"train": [], "test": []}
         gss = GroupShuffleSplit(n_splits=1, train_size=self.train_size)
         for i, (train_idx, test_idx) in enumerate(gss.split(X, y, groups=self.merged_df[["outcome_occurred"]])):
-            X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y[train_idx],\
+            X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y[train_idx], \
                                                  X.iloc[test_idx], y[test_idx]
 
             model.fit(X_train, y_train)
@@ -127,7 +128,8 @@ class IDPPPipeline:
     def predict_cumulative(self, best_model, df):
         X, y = self.X, self.y
         time_points = [2, 4, 6, 8, 10]
-        auc_scores, predictions = evaluate_cumulative(best_model, y_train=y, X_val=X, y_val=y, time_points=time_points, plot=True)
+        auc_scores, predictions = evaluate_cumulative(best_model, y_train=y, X_val=X, y_val=y, time_points=time_points,
+                                                      plot=True)
 
         pred_output = {self.id_feature: df.index,
                        "2years": predictions[:, 0],
@@ -136,7 +138,7 @@ class IDPPPipeline:
                        "8years": predictions[:, 3],
                        "10years": predictions[:, 4],
                        "run": self.TEAM_SHORTCUT}
-
+        print("AUC Scores whole", auc_scores)
         return pred_output
 
 

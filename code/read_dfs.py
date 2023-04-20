@@ -13,6 +13,6 @@ def filenames_in_folder(dir_path):
 
 def read_dfs(dir_path):
     file_names = filenames_in_folder(dir_path)
-    dfs = {file_name.removesuffix(".csv"): pd.read_csv(os.path.join(dir_path, file_name)) for file_name in file_names if file_name.endswith("csv")}
+    dfs = {file_name.removesuffix(".csv"): pd.read_csv(os.path.join(dir_path, file_name)) for file_name in file_names if
+           file_name.endswith("csv")}
     return dfs
-

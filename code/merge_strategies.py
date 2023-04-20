@@ -2,7 +2,6 @@ import pandas as pd
 
 
 def group_ts_df_by_id(orig_df, id_feat, time_series_feats, one_occurrence_feats, sort_by_this_feat):
-
     def group_ts_column_to_list(orig_df, id_feat, other_feature):
         unique_ids = orig_df[id_feat].unique()
         grouped_ts_column_as_list = orig_df.groupby(id_feat)[other_feature].apply(lambda x: x.values).values.tolist()
@@ -30,7 +29,6 @@ def group_ts_df_by_id(orig_df, id_feat, time_series_feats, one_occurrence_feats,
 
 
 def transpose_df_by_uniques(orig_df, id_feat, time_series_feats, one_occurrence_feats, sort_by_this_feat):
-
     def transpose_cols_to_rows_by_uniques(orig_df, id_feat, other_feature):
         transposed_df = pd.DataFrame(orig_df.groupby(id_feat)[other_feature].apply(lambda x: x.values).values.tolist(),
                                      index=orig_df[id_feat].unique())
@@ -42,7 +40,6 @@ def transpose_df_by_uniques(orig_df, id_feat, time_series_feats, one_occurrence_
                                      # TODO add option to store all uniques
                                      index=orig_df[id_feat].unique())
         return transposed_df
-
 
     orig_df = orig_df.sort_values(by=[id_feat, sort_by_this_feat])
     ts_dfs = [transpose_cols_to_rows_by_uniques(orig_df, id_feat, ts_feat) for ts_feat in time_series_feats]

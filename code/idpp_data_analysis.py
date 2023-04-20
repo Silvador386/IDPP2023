@@ -46,7 +46,6 @@ plot_params = dict(
     markerfacecolor="0.25",
 )
 
-
 DATASET = "datasetA"
 DATASET_DIR = f"../data/{DATASET}_train"
 ID_FEAT = "patient_id"
@@ -65,7 +64,8 @@ def filenames_in_folder(dir_path):
 
 def read_dfs(dir_path):
     file_names = filenames_in_folder(dir_path)
-    dfs = {file_name.removesuffix(".csv"): pd.read_csv(os.path.join(dir_path, file_name)) for file_name in file_names if file_name.endswith("csv")}
+    dfs = {file_name.removesuffix(".csv"): pd.read_csv(os.path.join(dir_path, file_name)) for file_name in file_names if
+           file_name.endswith("csv")}
     return dfs
 
 
@@ -77,7 +77,6 @@ def dfs_unique_patients(dfs):
 
 
 def merge_dfs_complete(dfs, dataset):
-
     def group_ts_column_to_list(orig_df, id_feat, other_feature):
         unique_ids = orig_df[id_feat].unique()
         grouped_ts_column_as_list = orig_df.groupby(id_feat)[other_feature].apply(lambda x: x.values).values.tolist()
@@ -121,7 +120,8 @@ def merge_dfs_complete(dfs, dataset):
 
     mri_df = dfs[f"{dataset}_train-mri"]
     ts_feats = ["mri_area_label", "lesions_T1", "lesions_T1_gadolinium", "number_of_lesions_T1_gadolinium",
-                "new_or_enlarged_lesions_T2", "number_of_new_or_enlarged_lesions_T2", "lesions_T2", "number_of_total_lesions_T2", "delta_mri_time0"]
+                "new_or_enlarged_lesions_T2", "number_of_new_or_enlarged_lesions_T2", "lesions_T2",
+                "number_of_total_lesions_T2", "delta_mri_time0"]
     oo_feats = ["centre"]
     sort_by_this_feat = "delta_mri_time0"
     mri_df = group_ts_df_by_id(mri_df, ID_FEAT, ts_feats, oo_feats, sort_by_this_feat)
@@ -131,7 +131,6 @@ def merge_dfs_complete(dfs, dataset):
     oo_feats = ["centre"]
     sort_by_this_feat = "delta_evoked_potential_time0"
     evoked_p_df = group_ts_df_by_id(evoked_p_df, ID_FEAT, ts_feats, oo_feats, sort_by_this_feat)
-
 
     edss_df = dfs[f"{dataset}_train-edss"]
     ts_feats = ["edss_as_evaluated_by_clinician", "delta_edss_time0"]
