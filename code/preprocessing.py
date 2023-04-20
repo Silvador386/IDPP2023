@@ -81,6 +81,7 @@ def preprocess(merged_df):
                          "altered_potential"
                          ]
 
+
     unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
     cols_to_drop = []
     for un_feat in unfinished_features:
@@ -88,13 +89,16 @@ def preprocess(merged_df):
     merged_df = merged_df.drop(cols_to_drop, axis=1)
 
     # merged_df = collapse_cols_as_occurrence_sum(merged_df, [("delta_relapse_time0", 6, None)])
+    merged_df = fill_missing_edss(merged_df, "edss_as_evaluated_by_clinician", list(available_functions.keys()))
     return merged_df
 
 
-def splits_strategy(df, valid_pct, use_Kfold=True):
-    splits = RandomSplitter(valid_pct=valid_pct)(range_of(df))
+def fastai_fill_split_xy(df):
+    splits = RandomSplitter(valid_pct=0.0)(range_of(df))
+    cat_names, cont_names = fastai_ccnames(df)
 
-    return splits
+    X, y, _, _ = fastai_tab(df, cat_names, cont_names, splits)
+    return X, y
 
 
 def fastai_ccnames(df):
@@ -114,7 +118,7 @@ def fastai_ccnames(df):
     return cat_names, cont_names
 
 
-def fastai_tab(df, cat_names, cont_names, y_names, splits):
+def fastai_tab(df, cat_names, cont_names, splits):
     to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
                        cat_names=cat_names,
                        cont_names=cont_names,
@@ -135,6 +139,20 @@ def fastai_tab(df, cat_names, cont_names, y_names, splits):
     y_valid = y_to_struct_array(y_valid, dtype=struct_dtype)
 
     return X_train, y_train, X_valid, y_valid
+
+
+def fill_missing_edss(df, feature, specific_names, drop_na_all=True):
+    feature_cols = select_same_feature_col_names(df, feature)
+    if drop_na_all:
+        df = df[~df[feature_cols].isna().all(axis=1)].copy()
+    for specific_name in specific_names:
+        func_win_cols = [feat for feat in feature_cols if specific_name in feat]
+        fill_value = 0  # df[func_win_cols].mean(axis=1, skipna=True)
+        df[func_win_cols] = df[func_win_cols].T.fillna(fill_value).T
+
+    # if drop_na_all:
+    #     df = df[~df[feature_cols].isna().any(axis=1)]  # Drop rows where at least 1 value was nan
+    return df
 
 
 def collapse_cols_as_occurrence_sum(df, feats_to_be_collapsed):

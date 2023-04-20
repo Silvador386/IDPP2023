@@ -8,7 +8,7 @@ def count_not_nan(array):
 
 
 def mode_wrapper(array):
-    if any(array):
-        return mode(array, keepdims=False, nan_policy="omit").mode
-    else:
+    if np.isnan(array).all():
         return np.nan
+    else:
+        return mode(array, keepdims=False, nan_policy="omit").mode
