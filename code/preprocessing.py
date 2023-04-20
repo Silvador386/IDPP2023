@@ -81,15 +81,14 @@ def preprocess(merged_df):
                          "altered_potential"
                          ]
 
-
     unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
     cols_to_drop = []
     for un_feat in unfinished_features:
         cols_to_drop += select_same_feature_col_names(merged_df, un_feat)
     merged_df = merged_df.drop(cols_to_drop, axis=1)
 
-    # merged_df = collapse_cols_as_occurrence_sum(merged_df, [("delta_relapse_time0", 6, None)])
     merged_df = fill_missing_edss(merged_df, "edss_as_evaluated_by_clinician", list(available_functions.keys()))
+    # merged_df = collapse_cols_as_occurrence_sum(merged_df, feats_to_be_collapsed)  # [("delta_relapse_time0", 6, None)]
     return merged_df
 
 
@@ -147,7 +146,7 @@ def fill_missing_edss(df, feature, specific_names, drop_na_all=True):
         df = df[~df[feature_cols].isna().all(axis=1)].copy()
     for specific_name in specific_names:
         func_win_cols = [feat for feat in feature_cols if specific_name in feat]
-        fill_value = 0  # df[func_win_cols].mean(axis=1, skipna=True)
+        fill_value = df[func_win_cols].mean(axis=1, skipna=True)
         df[func_win_cols] = df[func_win_cols].T.fillna(fill_value).T
 
     # if drop_na_all:
@@ -235,13 +234,12 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
         potential_value = selected_data["potential_value"]
         altered_potential = selected_data["altered_potential"]
         location = selected_data["location"]
-        for altered_p_type in ["Auditory", "Motor", "Somatosensory", "Visual"]:
-            mask = altered_potential == altered_p_type
+        for loc_type in ["left", "lower left", "upper left", "right", "lower right", "upper right"]:
+            mask = (location == loc_type)
             potential_value_masked = np.where(mask, potential_value, np.nan)
             calculated_values = np.apply_along_axis(np.nansum, 1, potential_value_masked)
-            new_feature_name = f"altered_potential_({start_time}_{end_time})_{altered_p_type}"
+            new_feature_name = f"altered_potential_({start_time}_{end_time})_{loc_type}"
             output_data[new_feature_name] = calculated_values
-
     new_df = pd.DataFrame(output_data)
     output_df = pd.concat([df, new_df], axis=1)
 

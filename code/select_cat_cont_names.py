@@ -1,5 +1,3 @@
-
-
 def fastai_ccnames_original(df):
     col_value_types = {"bool": ['ms_in_pediatric_age', 'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom',
                                 'supratentorial_symptom'],
