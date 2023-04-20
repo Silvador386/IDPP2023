@@ -35,21 +35,21 @@ class IDPPPipeline:
 
         self.estimators = init_surv_estimators()
 
-        config = {"column_names": self.X.columns.values}
-        self.wandb_run = setup_wandb(config)
+        config = {"column_names": list(self.X.columns.values)}
+        self.wandb_run = setup_wandb(project=f"IDPP-CLEF-{dataset_name[-1]}",
+                                     config=config)
 
     def run(self):
 
-        num_iter = 5
+        num_iter = 100
         for name, models in self.estimators.items():
             print(f"Estimator: {name}")
-            train_c_scores, val_c_scores, best_estimator = self.average_c_score(models, num_iter=num_iter)
+            train_c_scores, val_c_scores, best_estimator = self.average_c_score(models, name, num_iter=num_iter)
             print(f"Train ({num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
             print(f"Val   ({num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
-            self.wandb_run.log({"Model": name,
-                                "Num Iter": num_iter,
-                                "Train C-Score": np.average(train_c_scores),
-                                "Val C-Score": np.average(val_c_scores)})
+            self.wandb_run.log({f"{name}-Num Iter": num_iter,
+                                f"{name}-Train C-Score": np.average(train_c_scores),
+                                f"{name}-Val C-Score": np.average(val_c_scores)})
 
         self.predict_output_naive(best_estimator, self.merged_df)
         self.predict_cumulative(best_estimator, self.merged_df)
@@ -57,7 +57,7 @@ class IDPPPipeline:
     def run_model(self, model):
         X, y = self.X, self.y
         avg_scores = {"train": [], "test": []}
-        gss = GroupShuffleSplit(n_splits=1, train_size=0.8)
+        gss = GroupShuffleSplit(n_splits=1, train_size=0.7)
         for i, (train_idx, test_idx) in enumerate(gss.split(X, y, groups=self.merged_df[["outcome_occurred"]])):
             X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y[train_idx],\
                                                  X.iloc[test_idx], y[test_idx]
@@ -71,7 +71,7 @@ class IDPPPipeline:
 
         return np.average(np.array(avg_scores["train"])), np.average(np.array(avg_scores["test"])), model
 
-    def average_c_score(self, model, num_iter=5):
+    def average_c_score(self, model, name, num_iter=5):
         train_c_scores, val_c_scores, models = [], [], []
         for i in range(num_iter):
             error_flag = True
@@ -85,6 +85,10 @@ class IDPPPipeline:
 
                 except AssertionError:
                     print("Error")
+            if i % 5 == 0:
+                self.wandb_run.log({f"{name}-Num Iter": i,
+                                    f"{name}-Train C-Score": np.average(train_c_scores),
+                                    f"{name}-Val C-Score": np.average(val_c_scores)})
 
         best_estimator = models[np.array(val_c_scores).argmax()]
         return np.array(train_c_scores), np.array(val_c_scores), best_estimator
@@ -95,14 +99,14 @@ class IDPPPipeline:
         prediction_scores = best_model.predict(X)  # TODO Find out how to scale scores to fit in <0, 1 interval
         y_occ = [val[0] for val in y]
         y_time = [val[1] for val in y]
-        print("C-Index builtint:", best_model.score(X, y))
-        print("Predictions C-Index:", concordance_index_censored(y_occ, y_time, prediction_scores))
+        # print("C-Index builtint:", best_model.score(X, y))
+        # print("Predictions C-Index:", concordance_index_censored(y_occ, y_time, prediction_scores))
         prediction_scores = resize_prediction_score_mat(prediction_scores)
 
         pred_output = {self.id_feature: df.index,
                        "predictions": prediction_scores,
                        "run": self.TEAM_SHORTCUT}
-        print("Predictions C-Index Resized:", concordance_index_censored(y_occ, y_time, prediction_scores))
+        print(f"Predictions C-Index Resized:", concordance_index_censored(y_occ, y_time, prediction_scores))
         pred_df = pd.DataFrame(pred_output)
         return pred_df
 

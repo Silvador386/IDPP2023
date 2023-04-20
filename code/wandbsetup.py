@@ -1,11 +1,12 @@
 import wandb
 
 
-def setup_wandb(config):
+def setup_wandb(project, config):
     wandb.login()
     run = wandb.init(
-        project="IDPP-CLEF",
-        config=config
+        project=project,
+        config=config,
+        reinit=True
     )
 
     return run
