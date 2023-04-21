@@ -78,6 +78,7 @@ def preprocess(merged_df):
                                 ],
                                "delta_mri_time0",
                                time_windows,
+                               functions=available_functions,
                                drop_original=True)
 
     target_features = ['outcome_occurred', 'outcome_time']
@@ -87,7 +88,8 @@ def preprocess(merged_df):
     features_to_leave = [*features_to_encode, *ts_features, *target_features,
                          "patient_id", "time_since_onset", "diagnostic_delay",
                          'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
-                         "altered_potential", 'mri_area_label',
+                         "altered_potential",
+                         'mri_area_label',
                          'lesions_T1', 'lesions_T1_gadolinium',
                          'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
                          'number_of_new_or_enlarged_lesions_T2', 'lesions_T2',
@@ -298,7 +300,7 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
 """
 
 
-def preprocess_mri(df, feature_names, time_feature, time_windows, drop_original=False):
+def preprocess_mri(df, feature_names, time_feature, time_windows, functions, drop_original=False):
     features_cols = {feature: select_same_feature_col_names_specific(df, feature) for feature in feature_names}
 
     time_cols = select_same_feature_col_names(df, time_feature)
@@ -320,13 +322,28 @@ def preprocess_mri(df, feature_names, time_feature, time_windows, drop_original=
         for mri_label in ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]:
             mask = (mri_area == mri_label)
 
-            for region in ["number_of_lesions_T1_gadolinium",
-                           "number_of_new_or_enlarged_lesions_T2"]:
+            for region in ["number_of_lesions_T1_gadolinium"]:
                 region_data = selected_data[region]
                 region_masked = np.where(mask, region_data, np.nan)
                 calculated_values = np.apply_along_axis(np.nansum, 1, region_masked)
-                new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}_{region}"
+
+            region_data = selected_data["number_of_new_or_enlarged_lesions_T2"]
+            region_masked = np.where(mask, region_data, np.nan)
+            calculated_values np.apply_along_axis(np.nansum, 1, region_masked)
+
+            for f_name, func in functions.items():
+                calculated_values = np.apply_along_axis(func, 1, calculated_values)
+                new_feature_name = f"mri_{mri_label}_({start_time}_{end_time})_{f_name}"
                 output_data[new_feature_name] = calculated_values
+
+
+            # for region in ["number_of_lesions_T1_gadolinium",
+            #                "number_of_new_or_enlarged_lesions_T2"]:
+            #     region_data = selected_data[region]
+            #     region_masked = np.where(mask, region_data, np.nan)
+            #     calculated_values = np.apply_along_axis(np.nansum, 1, region_masked)
+            #     new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}_{region}"
+            #     output_data[new_feature_name] = calculated_values
 
             # potential_value_masked = np.where(mask, potential_value, np.nan)
             # calculated_values = np.apply_along_axis(np.nansum, 1, potential_value_masked)
