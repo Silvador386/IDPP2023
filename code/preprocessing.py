@@ -70,6 +70,16 @@ def preprocess(merged_df):
     merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
                                    {"occ_sum": count_not_nan}, time_windows, drop_original=True)
 
+    merged_df = preprocess_mri(merged_df,
+                               ['mri_area_label',
+                                'lesions_T1', 'lesions_T1_gadolinium',
+                                'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
+                                'number_of_new_or_enlarged_lesions_T2', 'lesions_T2','number_of_total_lesions_T2',
+                                ],
+                               "delta_mri_time0",
+                               time_windows,
+                               drop_original=True)
+
     target_features = ['outcome_occurred', 'outcome_time']
 
     merged_df = merged_df.set_index("patient_id")
@@ -77,7 +87,11 @@ def preprocess(merged_df):
     features_to_leave = [*features_to_encode, *ts_features, *target_features,
                          "patient_id", "time_since_onset", "diagnostic_delay",
                          'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
-                         "altered_potential"
+                         "altered_potential", 'mri_area_label',
+                         'lesions_T1', 'lesions_T1_gadolinium',
+                         'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
+                         'number_of_new_or_enlarged_lesions_T2', 'lesions_T2',
+                         'number_of_total_lesions_T2', 'delta_mri_time0'
                          ]
 
     unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
@@ -177,6 +191,11 @@ def select_same_feature_col_names(df, feature) -> list:
     return [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
 
 
+def select_same_feature_col_names_specific(df, feature) -> list:
+    return [col_name for col_name in df.columns.values.tolist()
+            if col_name.startswith(feature) and col_name[len(feature)+1:len(feature)+3].isdigit()]
+
+
 def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
     dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int64)
     res = pd.concat([original_dataframe, dummies], axis=1)
@@ -239,6 +258,81 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
             calculated_values = np.apply_along_axis(np.nansum, 1, potential_value_masked)
             new_feature_name = f"altered_potential_({start_time}_{end_time})_{loc_type}"
             output_data[new_feature_name] = calculated_values
+    new_df = pd.DataFrame(output_data)
+    output_df = pd.concat([df, new_df], axis=1)
+
+    if drop_original:
+        output_df = output_df.drop(
+            [*[f_name for feature_cols in features_cols.values() for f_name in list(feature_cols)], *time_cols], axis=1)
+
+    return output_df
+
+
+"""
++ mri_area_label:
+	The area on which the MRI has been performed. Possible values: {Brain Stem, Cervical Spinal Cord, Spinal Cord, Thoracic Spinal Cord}.
+
++ lesions_T1:
+	Boolean variable that states whether the MRI observes some lesions in T1 (True) or not (False).
+
++ lesions_T1_gadolinium:
+	Boolean variable that states whether there are some Gadolinium-enhancing lesions (True) or not (False).
+
++ number_of_lesions_T1_gadolinium:
+	The number of Gadolinium-enhancing lesions.
+
++ new_or_enlarged_lesions_T2:
+	Boolean variable that states whether there are new or enlarged lesions in T2 since last MRI (True) or not (False).
+
++ number_of_new_or_enlarged_lesions_T2:
+	Number of new or enlarged lesions in T2 since last MRI.
+
++ lesions_T2:
+	Boolean variable that states whether the MRI observes some lesions in T2 (True) or not (False).
+
++ number_of_total_lesions_T2:
+	The number of total lesions in T2. When not absent, possible values are: {0, 1-2, >=3, >=9}.
+
++ delta_mri_time0:
+	The date on which the MRI has been performed, expressed in days as relative delta with respect to Time 0 (mri_date - time0).
+"""
+
+
+def preprocess_mri(df, feature_names, time_feature, time_windows, drop_original=False):
+    features_cols = {feature: select_same_feature_col_names_specific(df, feature) for feature in feature_names}
+
+    time_cols = select_same_feature_col_names(df, time_feature)
+
+    output_data = {}
+    for (start_time, end_time) in time_windows:
+        selected_data = {feat_name: select_time_window_values(df, feat_cols, time_cols, start_time, end_time) for
+                         feat_name, feat_cols in features_cols.items()}
+
+        mri_area = selected_data["mri_area_label"]
+
+        lesions_T1 = selected_data["lesions_T1"]
+        num_gan_T1 = selected_data["number_of_lesions_T1_gadolinium"]
+
+        lesions_T2 = selected_data["lesions_T2"]
+        num_new_T2 = selected_data["number_of_new_or_enlarged_lesions_T2"]
+
+        # mri-label: ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]
+        for mri_label in ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]:
+            mask = (mri_area == mri_label)
+
+            for region in ["number_of_lesions_T1_gadolinium",
+                           "number_of_new_or_enlarged_lesions_T2"]:
+                region_data = selected_data[region]
+                region_masked = np.where(mask, region_data, np.nan)
+                calculated_values = np.apply_along_axis(np.nansum, 1, region_masked)
+                new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}_{region}"
+                output_data[new_feature_name] = calculated_values
+
+            # potential_value_masked = np.where(mask, potential_value, np.nan)
+            # calculated_values = np.apply_along_axis(np.nansum, 1, potential_value_masked)
+            # new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}"
+            # output_data[new_feature_name] = calculated_values
+
     new_df = pd.DataFrame(output_data)
     output_df = pd.concat([df, new_df], axis=1)
 
