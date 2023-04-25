@@ -25,7 +25,7 @@ set_config(display="text")  # displays text representation of estimators
 class IDPPPipeline:
     TEAM_SHORTCUT = "uwb_T1a_surfRF"
     num_iter = 100
-    train_size = 0.7
+    train_size = 0.75
 
     def __init__(self, dataset_dir, dataset_name, id_feature, seed):
         self.dataset_dir = dataset_dir
@@ -40,17 +40,19 @@ class IDPPPipeline:
 
         self.estimators = init_surv_estimators(self.seed)
 
-        self.project = f"IDPP-CLEF-{dataset_name[-1]}_V2"
+        self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
                        "num_iter": self.num_iter,
                        "train_size": self.train_size,
                        "seed": self.seed}
 
+        self.notes = "(stat_vars)_(edss)_(delta_relapse_time0)"
+
     def run(self):
         acc, est = [], []
         for name, models in self.estimators.items():
-            self.wandb_run = setup_wandb(project=self.project, config=self.config, name=name)
+            self.wandb_run = setup_wandb(project=self.project, config=self.config, name=name, notes=self.notes)
             print(f"Estimator: {name}")
             train_c_scores, val_c_scores, best_acc, best_estimator = self.average_c_score(models, num_iter=self.num_iter)
             acc.append(best_acc)
@@ -64,6 +66,11 @@ class IDPPPipeline:
                                 f"Train C-Std": np.std(train_c_scores),
                                 f"Val C-Std": np.std(val_c_scores)
                                 })
+
+            # best_estimator = est[np.array(acc).argmax()]
+
+            self.predict(best_estimator)
+            self.predict_cumulative(best_estimator, self.merged_df)
 
             self.wandb_run.finish()
 

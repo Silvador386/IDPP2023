@@ -19,6 +19,23 @@ ALL_FEATURES = ['patient_id', 'sex', 'residence_classification', 'ethnicity',
                 'number_of_new_or_enlarged_lesions_T2', 'lesions_T2',
                 'number_of_total_lesions_T2', 'delta_mri_time0']
 
+FINISHED_FEATURES = ["sex", "residence_classification", "ethnicity", 'ms_in_pediatric_age', "centre",
+                     'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom', 'supratentorial_symptom',
+                     "other_symptoms",
+                     "age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
+                     "delta_evoked_potential_time0", "delta_relapse_time0",
+                     'outcome_occurred', 'outcome_time'
+                     "patient_id",
+                     "time_since_onset", "diagnostic_delay",
+                     'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
+                     "altered_potential",
+                     'mri_area_label',
+                     'lesions_T1', 'lesions_T1_gadolinium',
+                     'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
+                     'number_of_new_or_enlarged_lesions_T2', 'lesions_T2',
+                     'number_of_total_lesions_T2', 'delta_mri_time0'
+                     ]
+
 feats_to_be_collapsed = [("new_or_enlarged_lesions_T2", 5, None),
                          ("number_of_new_or_enlarged_lesions_T2", 5, None),
                          ("altered_potential", 9, None),
@@ -46,9 +63,9 @@ def preprocess(merged_df):
                           ]
     # for feature_cols in features_to_encode:
     #     merged_df = df_one_hot_encode(merged_df, feature_cols, drop_org=True)
-
-    ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
-                   "delta_evoked_potential_time0", "delta_relapse_time0"]
+    #
+    # ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
+    #                "delta_evoked_potential_time0", "delta_relapse_time0"]
 
     available_functions = {"mean": np.nanmean,
                            "std": np.nanstd,
@@ -66,7 +83,7 @@ def preprocess(merged_df):
     # time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183),  (-182, 0)]
     merged_df = preprocess_evoked_potentials(merged_df, ['altered_potential', 'potential_value', 'location'],
                                              'delta_evoked_potential_time0', time_windows, drop_original=True)
-    # TODO interpolate over edss fillings
+    # # TODO interpolate over edss fillings
     merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
                                    {"occ_sum": count_not_nan}, time_windows, drop_original=True)
 
@@ -85,10 +102,14 @@ def preprocess(merged_df):
 
     merged_df = merged_df.set_index("patient_id")
 
-    features_to_leave = [*features_to_encode, *ts_features, *target_features,
-                         "patient_id", "time_since_onset", "diagnostic_delay",
-                         'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
-                         "altered_potential",
+    features_to_leave = [*features_to_encode,  *target_features,
+                         "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
+                         "delta_relapse_time0",
+                         # "time_since_onset", "diagnostic_delay",
+                         # 'altered_potential', 'potential_value', 'location',
+                         # 'delta_evoked_potential_time0'
+                         # 'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
+                         # "altered_potential",
                          # 'mri_area_label',
                          # 'lesions_T1', 'lesions_T1_gadolinium',
                          # 'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
@@ -121,9 +142,11 @@ def fastai_ccnames(df):
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-    cat_names = [*col_value_types["bool"], *col_value_types["object"], *col_value_types["int32"]
+    cat_names = [*col_value_types["bool"], *col_value_types["object"],
                  ]
-    cont_names = [*col_value_types["int64"], *col_value_types["float64"]]
+    cont_names = [*col_value_types["int64"], *col_value_types["float64"],
+                  *col_value_types["int32"]
+                  ]
 
     cont_names.remove("outcome_occurred")
     cont_names.remove("outcome_time")
@@ -155,13 +178,33 @@ def fastai_tab(df, cat_names, cont_names, splits):
 
 
 def fill_missing_edss(df, feature, specific_names, drop_na_all=True):
+
+    def func(row):
+        mean_value = np.nanmean(row)
+        flag_first_value = True
+        for i, value in enumerate(row):
+            if np.isnan(value):
+                if flag_first_value:
+                    row[i] = 0
+                else:
+                    row[i] = mean_value
+            else:
+                flag_first_value = False
+        return row
+
     feature_cols = select_same_feature_col_names(df, feature)
     if drop_na_all:
         df = df[~df[feature_cols].isna().all(axis=1)].copy()
     for specific_name in specific_names:
         func_win_cols = [feat for feat in feature_cols if specific_name in feat]
-        fill_value = df[func_win_cols].mean(axis=1, skipna=True)
-        df[func_win_cols] = df[func_win_cols].T.fillna(fill_value).T
+        fill_value = 0  #df[func_win_cols].mean(axis=1, skipna=True)
+
+        # func(df[func_win_cols])
+
+        df[func_win_cols] = df[func_win_cols].apply(func, axis=1)
+
+
+        # df[func_win_cols] = df[func_win_cols].T.fillna(fill_value).T
 
     # if drop_na_all:
     #     df = df[~df[feature_cols].isna().any(axis=1)]  # Drop rows where at least 1 value was nan
