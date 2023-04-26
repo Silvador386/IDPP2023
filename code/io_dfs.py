@@ -16,3 +16,8 @@ def read_dfs(dir_path):
     dfs = {file_name.removesuffix(".csv"): pd.read_csv(os.path.join(dir_path, file_name)) for file_name in file_names if
            file_name.endswith("csv")}
     return dfs
+
+
+def save_predictions(dir_path, file_name, predictions):
+    file_path = dir_path + "/" + file_name + ".txt"
+    predictions.to_csv(file_path, header=None, index=None, sep=' ', mode='w+')

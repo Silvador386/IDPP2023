@@ -6,7 +6,7 @@ import random
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from read_dfs import read_dfs
+from io_dfs import read_dfs, save_predictions
 from merge_dfs import merge_dfs
 from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_split_xy
 from classification import init_classifiers, fit_models
@@ -23,9 +23,12 @@ set_config(display="text")  # displays text representation of estimators
 
 
 class IDPPPipeline:
-    TEAM_SHORTCUT = "uwb_T1a_surfRF"
+    TEAM_SHORTCUT_T1 = "uwb_T1a_surfRF"
+    TEAM_SHORTCUT_T2 = "uwb_T2a_surfRF"
+    OUTPUT_DIR = "../dir"
     num_iter = 100
     train_size = 0.75
+    n_estimators = 100
 
     def __init__(self, dataset_dir, dataset_name, id_feature, seed):
         self.dataset_dir = dataset_dir
@@ -38,16 +41,17 @@ class IDPPPipeline:
         self.merged_df = preprocess(self.merged_df)
         self.X, self.y = fastai_fill_split_xy(self.merged_df, self.seed)
 
-        self.estimators = init_surv_estimators(self.seed)
+        self.estimators = init_surv_estimators(self.seed, self.n_estimators)
 
         self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
                        "num_iter": self.num_iter,
                        "train_size": self.train_size,
-                       "seed": self.seed}
+                       "seed": self.seed,
+                       "n_estimators": self.n_estimators}
 
-        self.notes = "(stat_vars)_(edss)_(delta_relapse_time0)"
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type])_moreest"
 
     def run(self):
         acc, est = [], []
@@ -76,8 +80,9 @@ class IDPPPipeline:
 
         best_estimator = est[np.array(acc).argmax()]
 
-        self.predict(best_estimator)
-        self.predict_cumulative(best_estimator, self.merged_df)
+        predictions_df = self.predict(best_estimator)
+        cumulative_predictions_df = self.predict_cumulative(best_estimator, self.merged_df)
+
 
     def run_model(self, model):
         X, y = self.X, self.y
@@ -125,21 +130,24 @@ class IDPPPipeline:
         best_acc, best_estimator = (np.max(np.array(val_c_scores)), models[np.array(val_c_scores).argmax()])
         return np.array(train_c_scores), np.array(val_c_scores), best_acc, best_estimator
 
-    def predict(self, best_model):
+    def predict(self, best_model, save=False):
         X, y = self.X, self.y
 
         c_score, predictions = evaluate_c(best_model, X, y)
 
         pred_output = {self.id_feature: self.merged_df.index,
                        "predictions": predictions,
-                       "run": self.TEAM_SHORTCUT}
+                       "run": self.TEAM_SHORTCUT_T1}
 
         print(best_model.__class__.__name__)
         print(f"Predictions C-Index Resized:", c_score)
         pred_df = pd.DataFrame(pred_output)
+
+        if save:
+            save_predictions(self.OUTPUT_DIR, self.TEAM_SHORTCUT_T1, pred_df)
         return pred_df
 
-    def predict_cumulative(self, best_model, df):
+    def predict_cumulative(self, best_model, df, save=False):
         X, y = self.X, self.y
         time_points = [2, 4, 6, 8, 10]
         auc_scores, predictions = evaluate_cumulative(best_model, y_train=y, X_val=X, y_val=y, time_points=time_points,
@@ -151,9 +159,13 @@ class IDPPPipeline:
                        "6years": predictions[:, 2],
                        "8years": predictions[:, 3],
                        "10years": predictions[:, 4],
-                       "run": self.TEAM_SHORTCUT}
+                       "run": self.TEAM_SHORTCUT_T2}
         print("AUC Scores whole", auc_scores)
-        return pred_output
+        pred_df = pd.DataFrame(pred_output)
+        if save:
+            save_predictions(self.OUTPUT_DIR, self.TEAM_SHORTCUT_T2, pred_df)
+
+        return pred_df
 
 
 def main():

@@ -61,8 +61,8 @@ def preprocess(merged_df):
                           'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom', 'supratentorial_symptom',
                           "other_symptoms"
                           ]
-    # for feature_cols in features_to_encode:
-    #     merged_df = df_one_hot_encode(merged_df, feature_cols, drop_org=True)
+    for feature_cols in features_to_encode:
+        merged_df = df_one_hot_encode(merged_df, feature_cols, drop_org=True)
     #
     # ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
     #                "delta_evoked_potential_time0", "delta_relapse_time0"]
@@ -85,13 +85,13 @@ def preprocess(merged_df):
                                              'delta_evoked_potential_time0', time_windows, drop_original=True)
     # # TODO interpolate over edss fillings
     merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
-                                   {"occ_sum": count_not_nan}, time_windows, drop_original=True)
+                                   available_functions, time_windows, drop_original=True)
 
     # merged_df = preprocess_mri(merged_df,
     #                            ['mri_area_label',
     #                             'lesions_T1', 'lesions_T1_gadolinium',
     #                             'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
-    #                             'number_of_new_or_enlarged_lesions_T2', 'lesions_T2','number_of_total_lesions_T2',
+    #                             'number_of_new_or_enlarged_lesions_T2', 'lesions_T2', 'number_of_total_lesions_T2',
     #                             ],
     #                            "delta_mri_time0",
     #                            time_windows,
@@ -106,8 +106,7 @@ def preprocess(merged_df):
                          "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
                          "delta_relapse_time0",
                          # "time_since_onset", "diagnostic_delay",
-                         # 'altered_potential', 'potential_value', 'location',
-                         # 'delta_evoked_potential_time0'
+                         'altered_potential', 'potential_value', 'location', 'delta_evoked_potential_time0',
                          # 'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
                          # "altered_potential",
                          # 'mri_area_label',
@@ -142,7 +141,8 @@ def fastai_ccnames(df):
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-    cat_names = [*col_value_types["bool"], *col_value_types["object"],
+    cat_names = [*col_value_types["int8"],
+                 # *col_value_types["bool"], *col_value_types["object"],
                  ]
     cont_names = [*col_value_types["int64"], *col_value_types["float64"],
                   *col_value_types["int32"]
@@ -242,7 +242,7 @@ def select_same_feature_col_names_specific(df, feature) -> list:
 
 
 def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
-    dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int64)
+    dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int8)
     res = pd.concat([original_dataframe, dummies], axis=1)
     if drop_org:
         res = res.drop(feature_to_encode, axis=1)
@@ -297,9 +297,11 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
         potential_value = selected_data["potential_value"]
         altered_potential = selected_data["altered_potential"]
         location = selected_data["location"]
-        for loc_type in ["left", "lower left", "upper left", "right", "lower right", "upper right"]:
-            mask = (location == loc_type)
+        for loc_type in ["Auditory", "Motor", "Somatosensory", "Visual"]:
+            mask = (altered_potential == loc_type)
+            # potential_value = np.where(potential_value.astype(str) == "True", potential_value, 0).astype(int)
             potential_value_masked = np.where(mask, potential_value, np.nan)
+
             calculated_values = np.apply_along_axis(np.nansum, 1, potential_value_masked)
             new_feature_name = f"altered_potential_({start_time}_{end_time})_{loc_type}"
             output_data[new_feature_name] = calculated_values
