@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sksurv.nonparametric import kaplan_meier_estimator
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
@@ -19,6 +20,10 @@ def evaluate_c(model, X, y):
     if abs(c_score - c_score_check) > 1e5:
         print("Warning: C-Score not same after resize!")
     return c_score, prediction_scores
+
+
+def wrap_c_scorer(estimator, X_test, y_test):
+    return evaluate_c(estimator, X_test, y_test)[0]
 
 
 def evaluate_cumulative(model, y_train, X_val, y_val, time_points=None, plot=False):
@@ -65,6 +70,12 @@ def resize_prediction_score_naive(prediction_scores):
     return (prediction_scores - min_value) / (max_value - min_value)
 
 
+def plot_coef_(estimator, X):
+    coefs = pd.Series(estimator.coef_[1:], index=X.columns)
+    print(coefs)
+
+
+
 def clr_acc(models, X_train, y_train, X_valid, y_valid):
     accuracies = {}
     for model_name, model in models.items():
@@ -89,8 +100,6 @@ def evaluate_regressors_rmsle(regressors, X, y):
 
 
 def evaluate_estimators(estimator, X, y, plot=True, print_coef=False):
-    # prediction = model.predict(X)
-    # result = concordance_index_censored([i for i, _ in y], [i for _, i in y], prediction)
 
     c_score = estimator.score(X, y)
 
@@ -141,7 +150,3 @@ def plot_kaplan(status, time):
     plt.ylim([0, 1])
     plt.show()
 
-
-def evaluate_c_index(classifiers, regressors):
-    from lifelines.utils.concordance import concordance_index
-    # c_index = concordance_index(regression_preds, classification_preds)

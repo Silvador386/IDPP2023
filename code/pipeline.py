@@ -11,7 +11,7 @@ from merge_dfs import merge_dfs
 from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_split_xy
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
-from evaluation import evaluate_c, evaluate_cumulative, evaluate_estimators
+from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
 from surestimators import init_surv_estimators
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
@@ -25,7 +25,7 @@ set_config(display="text")  # displays text representation of estimators
 class IDPPPipeline:
     TEAM_SHORTCUT_T1 = "uwb_T1a_surfRF"
     TEAM_SHORTCUT_T2 = "uwb_T2a_surfRF"
-    OUTPUT_DIR = "../dir"
+    OUTPUT_DIR = "../out"
     num_iter = 100
     train_size = 0.75
     n_estimators = 100
@@ -51,7 +51,7 @@ class IDPPPipeline:
                        "seed": self.seed,
                        "n_estimators": self.n_estimators}
 
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type])_moreest"
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type])_difseed"
 
     def run(self):
         acc, est = [], []
@@ -70,8 +70,8 @@ class IDPPPipeline:
                                 f"Train C-Std": np.std(train_c_scores),
                                 f"Val C-Std": np.std(val_c_scores)
                                 })
-
-            # best_estimator = est[np.array(acc).argmax()]
+            if name is "CGBSA":
+                plot_coef_(best_estimator, self.X)
 
             self.predict(best_estimator)
             self.predict_cumulative(best_estimator, self.merged_df)
@@ -80,15 +80,17 @@ class IDPPPipeline:
 
         best_estimator = est[np.array(acc).argmax()]
 
-        predictions_df = self.predict(best_estimator)
-        cumulative_predictions_df = self.predict_cumulative(best_estimator, self.merged_df)
+        predictions_df = self.predict(best_estimator, save=True)
+        cumulative_predictions_df = self.predict_cumulative(best_estimator, self.merged_df, save=True)
 
 
     def run_model(self, model):
         X, y = self.X, self.y
         avg_scores = {"train": [], "test": []}
+        group_kfold = GroupKFold(n_splits=10)
+
         gss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2**10))
-        for i, (train_idx, test_idx) in enumerate(gss.split(X, y, )):
+        for i, (train_idx, test_idx) in enumerate(gss.split(X, y,)):
             X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y[train_idx], \
                                                  X.iloc[test_idx], y[test_idx]
 
@@ -101,7 +103,7 @@ class IDPPPipeline:
 
             # test_auc, predictions = evaluate_cumulative(model, y_train, X_valid, y_valid)
 
-        return np.average(np.array(avg_scores["train"])), np.average(np.array(avg_scores["test"])), model
+        return avg_scores["train"], avg_scores["test"], model
 
     def average_c_score(self, model, num_iter=5):
         train_c_scores, val_c_scores, models = [], [], []
@@ -110,9 +112,9 @@ class IDPPPipeline:
             while error_flag:
                 try:
                     train_c_score, val_c_score, model = self.run_model(model)
-                    train_c_scores.append(train_c_score)
-                    val_c_scores.append(val_c_score)
-                    models.append(model)
+                    train_c_scores += train_c_score
+                    val_c_scores += val_c_score
+                    models += model
                     error_flag = False
 
                 except AssertionError:
@@ -167,9 +169,36 @@ class IDPPPipeline:
 
         return pred_df
 
+    def run_ensemble(self):
+        from sksurv.meta import EnsembleSelection, EnsembleSelectionRegressor, Stacking
+
+        model = EnsembleSelectionRegressor([(name, est) for name, est in self.estimators.items()], scorer=wrap_c_scorer,
+                                           n_jobs=10)
+
+        self.wandb_run = setup_wandb(project=self.project, config=self.config, name="EnsembleSelection",
+                                     notes=self.notes)
+        print(f"Estimator: EnsembleSelection")
+        train_c_scores, val_c_scores, best_acc, best_estimator = self.average_c_score(model, num_iter=self.num_iter)
+        print(f"Train ({self.num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
+        print(f"Val   ({self.num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
+
+        self.wandb_run.log({f"Num Iter": self.num_iter,
+                            f"Train C-Score Average": np.average(train_c_scores),
+                            f"Val C-Score Average": np.average(val_c_scores),
+                            f"Train C-Std": np.std(train_c_scores),
+                            f"Val C-Std": np.std(val_c_scores)
+                            })
+
+        # best_estimator = est[np.array(acc).argmax()]
+
+        self.predict(best_estimator)
+        self.predict_cumulative(best_estimator, self.merged_df)
+
+        self.wandb_run.finish()
+
 
 def main():
-    DEFAULT_RANDOM_SEED = 2021
+    DEFAULT_RANDOM_SEED = 2021  # random.randint(0, 2**10)
 
     def seedBasic(seed=DEFAULT_RANDOM_SEED):
         random.seed(seed)
