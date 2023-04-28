@@ -27,8 +27,8 @@ class IDPPPipeline:
     TEAM_SHORTCUT_T2 = "uwb_T2a_surfRF"
     OUTPUT_DIR = "../out"
     num_iter = 100
-    train_size = 0.75
-    n_estimators = 100
+    train_size = 0.8
+    n_estimators = 200
 
     def __init__(self, dataset_dir, dataset_name, id_feature, seed):
         self.dataset_dir = dataset_dir
@@ -39,9 +39,13 @@ class IDPPPipeline:
         self.dfs = read_dfs(self.dataset_dir)
         self.merged_df = merge_dfs(self.dfs, self.dataset_name, self.id_feature)
         self.merged_df = preprocess(self.merged_df)
-        self.X, self.y = fastai_fill_split_xy(self.merged_df, self.seed)
+        self.X, self.y, self.y_df = fastai_fill_split_xy(self.merged_df, self.seed)
 
         self.estimators = init_surv_estimators(self.seed, self.n_estimators)
+
+        # corr_mat = self.merged_df[self.merged_df.columns.values].corr()
+        # f, ax = plt.subplots(figsize=(20, 20))
+        # sns.heatmap(corr_mat, vmax=1, cmap="viridis", square=True)
 
         self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
         self.config = {"column_names": list(self.X.columns.values),
@@ -51,25 +55,19 @@ class IDPPPipeline:
                        "seed": self.seed,
                        "n_estimators": self.n_estimators}
 
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type])_difseed"
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_rest"
 
     def run(self):
         acc, est = [], []
         for name, models in self.estimators.items():
             self.wandb_run = setup_wandb(project=self.project, config=self.config, name=name, notes=self.notes)
             print(f"Estimator: {name}")
-            train_c_scores, val_c_scores, best_acc, best_estimator = self.average_c_score(models, num_iter=self.num_iter)
+            train_c_scores, val_c_scores, best_acc, best_estimator = self.run_n_times(models, num_iter=self.num_iter)
             acc.append(best_acc)
             est.append(best_estimator)
             print(f"Train ({self.num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
             print(f"Val   ({self.num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
 
-            self.wandb_run.log({f"Num Iter": self.num_iter,
-                                f"Train C-Score Average": np.average(train_c_scores),
-                                f"Val C-Score Average": np.average(val_c_scores),
-                                f"Train C-Std": np.std(train_c_scores),
-                                f"Val C-Std": np.std(val_c_scores)
-                                })
             if name is "CGBSA":
                 plot_coef_(best_estimator, self.X)
 
@@ -85,12 +83,14 @@ class IDPPPipeline:
 
 
     def run_model(self, model):
-        X, y = self.X, self.y
-        avg_scores = {"train": [], "test": []}
-        group_kfold = GroupKFold(n_splits=10)
+        X, y, y_df = self.X, self.y, self.y_df
+        avg_scores = {"train": [], "test": [], "model": []}
+        gss = GroupShuffleSplit(n_splits=10, train_size=self.train_size)
+        group_kfold = GroupKFold(n_splits=2)
+        groups = y_df["outcome_occurred"].to_numpy()
 
-        gss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2**10))
-        for i, (train_idx, test_idx) in enumerate(gss.split(X, y,)):
+        ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2**10))
+        for i, (train_idx, test_idx) in enumerate(ss.split(X, y)):
             X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y[train_idx], \
                                                  X.iloc[test_idx], y[test_idx]
 
@@ -100,36 +100,35 @@ class IDPPPipeline:
             test_c_score, _ = evaluate_c(model, X_valid, y_valid)
             avg_scores["train"].append(train_c_score)
             avg_scores["test"].append(test_c_score)
+            avg_scores["model"].append(model)
 
-            # test_auc, predictions = evaluate_cumulative(model, y_train, X_valid, y_valid)
+        return avg_scores["train"], avg_scores["test"], avg_scores["model"]
 
-        return avg_scores["train"], avg_scores["test"], model
-
-    def average_c_score(self, model, num_iter=5):
-        train_c_scores, val_c_scores, models = [], [], []
+    def run_n_times(self, model, num_iter=5):
+        train_c_scores, val_c_scores, fitted_models = [], [], []
         for i in range(num_iter):
             error_flag = True
             while error_flag:
                 try:
-                    train_c_score, val_c_score, model = self.run_model(model)
+                    train_c_score, val_c_score, fitted_model = self.run_model(model)
                     train_c_scores += train_c_score
                     val_c_scores += val_c_score
-                    models += model
+                    fitted_models += fitted_model
                     error_flag = False
 
                 except AssertionError:
                     print("Error")
-            if i % 5 == 0:
-                self.wandb_run.log({f"Num Iter": i,
+            if i % 5 == 0 or (i+1) == num_iter:
+                self.wandb_run.log({f"Num Iter": i+1,
                                     f"Train C-Score Average": np.average(train_c_scores),
                                     f"Val C-Score Average": np.average(val_c_scores),
-                                    f"Train C-Score": train_c_score,
-                                    f"Val C-Score": val_c_score,
+                                    f"Train C-Score": train_c_score[0],
+                                    f"Val C-Score": val_c_score[0],
                                     f"Train C-Std": np.std(train_c_scores),
                                     f"Val C-Std": np.std(val_c_scores)
                                     })
 
-        best_acc, best_estimator = (np.max(np.array(val_c_scores)), models[np.array(val_c_scores).argmax()])
+        best_acc, best_estimator = (np.max(np.array(val_c_scores)), fitted_models[np.array(val_c_scores).argmax()])
         return np.array(train_c_scores), np.array(val_c_scores), best_acc, best_estimator
 
     def predict(self, best_model, save=False):
@@ -178,7 +177,7 @@ class IDPPPipeline:
         self.wandb_run = setup_wandb(project=self.project, config=self.config, name="EnsembleSelection",
                                      notes=self.notes)
         print(f"Estimator: EnsembleSelection")
-        train_c_scores, val_c_scores, best_acc, best_estimator = self.average_c_score(model, num_iter=self.num_iter)
+        train_c_scores, val_c_scores, best_acc, best_estimator = self.run_n_times(model, num_iter=self.num_iter)
         print(f"Train ({self.num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
         print(f"Val   ({self.num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
 

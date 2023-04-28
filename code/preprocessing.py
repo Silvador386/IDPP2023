@@ -74,8 +74,8 @@ def preprocess(merged_df):
                            }
 
     # time_windows = [(-730, -365), (-365, -183), (-182, 0), (-730, 0), (-365, 0)]
-    time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183),
-                    (-1095, 0), (-730, 0), (-549, 0), (-365, 0), (-183, 0)]
+    time_windows = [(-913, -730), (-730, -549), (-549, -365), (-365, -183),
+                    (-913, 0), (-730, 0), (-549, 0), (-365, 0), (-183, 0)]
 
     merged_df = create_tw_features(merged_df, "edss_as_evaluated_by_clinician", "delta_edss_time0", available_functions,
                                    time_windows, drop_original=True)
@@ -131,8 +131,8 @@ def fastai_fill_split_xy(df, seed):
     splits = RandomSplitter(valid_pct=0.0, seed=seed)(range_of(df))
     cat_names, cont_names = fastai_ccnames(df)
 
-    X, y, _, _ = fastai_tab(df, cat_names, cont_names, splits)
-    return X, y
+    X, (y, y_df), _, _ = fastai_tab(df, cat_names, cont_names, splits)
+    return X, y, y_df
 
 
 def fastai_ccnames(df):
@@ -158,7 +158,7 @@ def fastai_tab(df, cat_names, cont_names, splits):
     to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
                        cat_names=cat_names,
                        cont_names=cont_names,
-                       y_names=("outcome_occurred", "outcome_time"),
+                       y_names=["outcome_occurred", "outcome_time"],
                        splits=splits)
 
     X_train, y_train = to.train.xs, to.train.ys.values.ravel()
@@ -171,10 +171,15 @@ def fastai_tab(df, cat_names, cont_names, splits):
         return y
 
     struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
-    y_train = y_to_struct_array(y_train, dtype=struct_dtype)
-    y_valid = y_to_struct_array(y_valid, dtype=struct_dtype)
+    y_train_struct = y_to_struct_array(y_train, dtype=struct_dtype)
+    y_valid_struct = y_to_struct_array(y_valid, dtype=struct_dtype)
 
-    return X_train, y_train, X_valid, y_valid
+    y_train_df = pd.DataFrame({"outcome_occurred": y_train[::2],
+                            "outcome_time": y_train[1::2]})
+    y_valid_df = pd.DataFrame({"outcome_occurred": y_valid[::2],
+                            "outcome_time": y_valid[1::2]})
+
+    return X_train, (y_train_struct, y_train_df), X_valid, (y_valid_struct, y_valid_df)
 
 
 def fill_missing_edss(df, feature, specific_names, drop_na_all=True):
@@ -294,17 +299,23 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
         selected_data = {feat_name: select_time_window_values(df, feat_cols, time_cols, start_time, end_time) for
                          feat_name, feat_cols in features_cols.items()}
 
-        potential_value = selected_data["potential_value"]
-        altered_potential = selected_data["altered_potential"]
-        location = selected_data["location"]
-        for loc_type in ["Auditory", "Motor", "Somatosensory", "Visual"]:
-            mask = (altered_potential == loc_type)
-            # potential_value = np.where(potential_value.astype(str) == "True", potential_value, 0).astype(int)
-            potential_value_masked = np.where(mask, potential_value, np.nan)
+        potential_value = selected_data["potential_value"].astype(float)
+        # potential_value = np.where(potential_value.astype(str) == "True", potential_value, True).astype(int)
 
-            calculated_values = np.apply_along_axis(np.nansum, 1, potential_value_masked)
-            new_feature_name = f"altered_potential_({start_time}_{end_time})_{loc_type}"
-            output_data[new_feature_name] = calculated_values
+
+        # altered_potential = selected_data["altered_potential"]
+        # location = selected_data["location"]
+        # for loc_type in ["Auditory", "Motor", "Somatosensory", "Visual"]:
+        #     mask = (altered_potential == loc_type)
+        #     potential_value_masked = np.where(mask, potential_value, np.nan)
+
+        calculated_values = np.apply_along_axis(np.nansum, 1, potential_value)
+        new_feature_name = f"altered_potential_({start_time}_{end_time})_sum"
+        output_data[new_feature_name] = calculated_values
+        calculated_values = np.apply_along_axis(count_not_nan, 1, potential_value)
+        new_feature_name = f"altered_potential_({start_time}_{end_time})_nnan"
+        output_data[new_feature_name] = calculated_values
+
     new_df = pd.DataFrame(output_data)
     output_df = pd.concat([df, new_df], axis=1)
 
