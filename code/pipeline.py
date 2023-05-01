@@ -12,12 +12,20 @@ from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_sp
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
-from surestimators import init_surv_estimators
+from surestimators import init_surv_estimators, init_survtrace, fit_surv_trace, eval_survtrace
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
 from wandbsetup import setup_wandb
 import wandb
 from sklearn import set_config
+
+from load_survtrace import load_data
+from survtrace.survtrace.evaluate_utils import Evaluator
+from survtrace.survtrace.utils import set_random_seed
+from survtrace.survtrace.model import SurvTraceSingle
+from survtrace.survtrace.train_utils import Trainer
+from survtrace.survtrace.config import STConfig
+
 
 set_config(display="text")  # displays text representation of estimators
 
@@ -56,6 +64,54 @@ class IDPPPipeline:
                        "n_estimators": self.n_estimators}
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_rest"
+
+        X, y, y_df = self.X, self.y, self.y_df
+
+        STConfig['data'] = 'idpp'
+
+        STConfig['seed'] = seed
+
+        hparams = {
+            'batch_size': 64,
+            'weight_decay': 1e-4,
+            'learning_rate': 1e-3,
+            'epochs': 20,
+        }
+
+        # %%
+
+        # load data
+        df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, self.merged_df, X, y, y_df)
+
+        # get model
+        model = SurvTraceSingle(STConfig)
+
+        # initialize a trainer
+        trainer = Trainer(model)
+        train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
+                                           batch_size=hparams['batch_size'],
+                                           epochs=hparams['epochs'],
+                                           learning_rate=hparams['learning_rate'],
+                                           weight_decay=hparams['weight_decay'], )
+
+        # evaluate model
+        evaluator = Evaluator(df, df_train.index)
+        evaluator.eval(model, (df_test, df_y_test))
+        print("done")
+
+        y_df.index = X.index
+        y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
+
+        ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2 ** 10))
+        for i, (train_idx, test_idx) in enumerate(ss.split(X, y)):
+
+            X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_df.iloc[train_idx], \
+                                                 X.iloc[test_idx], y_df.iloc[test_idx]
+            survtrace_model = init_survtrace(seed)
+            train_loss, val_loss = fit_surv_trace(survtrace_model, X_train, y_train, X_valid, y_valid)
+
+
+            eval_survtrace(survtrace_model, X, X_train, X_valid, y_valid)
 
     def run(self):
         acc, est = [], []
