@@ -12,7 +12,7 @@ from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_sp
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
-from surestimators import init_surv_estimators, init_survtrace, fit_surv_trace, eval_survtrace
+from survEstimators import init_surv_estimators, run_survtrace
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
 from wandbsetup import setup_wandb
@@ -51,10 +51,6 @@ class IDPPPipeline:
 
         self.estimators = init_surv_estimators(self.seed, self.n_estimators)
 
-        # corr_mat = self.merged_df[self.merged_df.columns.values].corr()
-        # f, ax = plt.subplots(figsize=(20, 20))
-        # sns.heatmap(corr_mat, vmax=1, cmap="viridis", square=True)
-
         self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
@@ -65,53 +61,56 @@ class IDPPPipeline:
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_rest"
 
-        X, y, y_df = self.X, self.y, self.y_df
-
-        STConfig['data'] = 'idpp'
-
-        STConfig['seed'] = seed
-
-        hparams = {
-            'batch_size': 64,
-            'weight_decay': 1e-4,
-            'learning_rate': 1e-3,
-            'epochs': 20,
-        }
-
-        # %%
-
-        # load data
-        df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, self.merged_df, X, y, y_df)
-
-        # get model
-        model = SurvTraceSingle(STConfig)
-
-        # initialize a trainer
-        trainer = Trainer(model)
-        train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
-                                           batch_size=hparams['batch_size'],
-                                           epochs=hparams['epochs'],
-                                           learning_rate=hparams['learning_rate'],
-                                           weight_decay=hparams['weight_decay'], )
-
-        # evaluate model
-        evaluator = Evaluator(df, df_train.index)
-        evaluator.eval(model, (df_test, df_y_test))
-        print("done")
-
-        y_df.index = X.index
-        y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
-
-        ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2 ** 10))
-        for i, (train_idx, test_idx) in enumerate(ss.split(X, y)):
-
-            X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_df.iloc[train_idx], \
-                                                 X.iloc[test_idx], y_df.iloc[test_idx]
-            survtrace_model = init_survtrace(seed)
-            train_loss, val_loss = fit_surv_trace(survtrace_model, X_train, y_train, X_valid, y_valid)
-
-
-            eval_survtrace(survtrace_model, X, X_train, X_valid, y_valid)
+        # X, y, y_df = self.X, self.y, self.y_df
+        #
+        # STConfig['data'] = 'idpp'
+        #
+        # STConfig['seed'] = seed
+        #
+        # hparams = {
+        #     'batch_size': 64,
+        #     'weight_decay': 1e-4,
+        #     'learning_rate': 1e-3,
+        #     'epochs': 40,
+        # }
+        #
+        # # %%
+        #
+        # # load data
+        # df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, self.merged_df, X, y_df)
+        #
+        # # get model
+        # model = SurvTraceSingle(STConfig)
+        #
+        # # initialize a trainer
+        # trainer = Trainer(model)
+        # train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
+        #                                    batch_size=hparams['batch_size'],
+        #                                    epochs=hparams['epochs'],
+        #                                    learning_rate=hparams['learning_rate'],
+        #                                    weight_decay=hparams['weight_decay'], )
+        #
+        # # evaluate model
+        # evaluator = Evaluator(df, df_train.index)
+        # evaluator.eval(model, (df_test, df_y_test))
+        # print("done")
+        #
+        # out = model.predict(df_test, batch_size=64)
+        # print(concordance_index_censored(df_y_test["event"].astype(bool), df_y_test["duration"], out[:, -1]))
+        # # print(out)
+        # y_df.index = X.index
+        # y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
+        #
+        # ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2 ** 10))
+        # for i, (train_idx, test_idx) in enumerate(ss.split(X, y)):
+        #
+        #     X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_df.iloc[train_idx], \
+        #                                          X.iloc[test_idx], y_df.iloc[test_idx]
+        #     survtrace_model = init_survtrace(seed)
+        #     train_loss, val_loss = fit_surv_trace(survtrace_model, X_train, y_train, X_valid, y_valid)
+        #
+        #
+        #     eval_survtrace(survtrace_model, X, X_train, X_valid, y_valid)
 
     def run(self):
         acc, est = [], []
@@ -124,7 +123,7 @@ class IDPPPipeline:
             print(f"Train ({self.num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
             print(f"Val   ({self.num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
 
-            if name is "CGBSA":
+            if name == "CGBSA":
                 plot_coef_(best_estimator, self.X)
 
             self.predict(best_estimator)
@@ -150,10 +149,13 @@ class IDPPPipeline:
             X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y[train_idx], \
                                                  X.iloc[test_idx], y[test_idx]
 
-            model.fit(X_train, y_train)
+            if model == "SurvTRACE":
+                model, train_c_score, test_c_score = run_survtrace(self.seed, self.merged_df, X, y_df, train_idx, test_idx)
+            else:
+                model.fit(X_train, y_train)
 
-            train_c_score, _ = evaluate_c(model, X_train, y_train)
-            test_c_score, _ = evaluate_c(model, X_valid, y_valid)
+                train_c_score, _ = evaluate_c(model, X_train, y_train)
+                test_c_score, _ = evaluate_c(model, X_valid, y_valid)
             avg_scores["train"].append(train_c_score)
             avg_scores["test"].append(test_c_score)
             avg_scores["model"].append(model)
@@ -261,7 +263,6 @@ def main():
         np.random.seed(seed)
 
     seedBasic(DEFAULT_RANDOM_SEED)
-
 
     DATASET = "datasetA"
     DATASET_DIR = f"../data/{DATASET}_train"

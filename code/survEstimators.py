@@ -1,9 +1,10 @@
 from sksurv.ensemble import RandomSurvivalForest, ComponentwiseGradientBoostingSurvivalAnalysis, \
     GradientBoostingSurvivalAnalysis
+from sksurv.metrics import concordance_index_censored
 from sksurv.svm import FastKernelSurvivalSVM, HingeLossSurvivalSVM, MinlipSurvivalAnalysis
 from sksurv.linear_model import CoxPHSurvivalAnalysis
 
-from survtrace.survtrace.dataset import load_data
+from load_survtrace import load_data
 from survtrace.survtrace.evaluate_utils import Evaluator
 from survtrace.survtrace.utils import set_random_seed
 from survtrace.survtrace.model import SurvTraceSingle
@@ -23,39 +24,44 @@ def init_surv_estimators(seed, n_estimators=100):
                   # "MinlipSA": msa,
                   "CGBSA": cgb,
                   # "Cox": cox
+                  # "SurvTRACE": "SurvTRACE",
                   }
 
     return estimators
 
 
-def init_survtrace(seed):
+def run_survtrace(seed, merged_df, X, y_df, train_idx, test_idx):
     STConfig['data'] = 'idpp'
+    STConfig['seed'] = seed
 
-    STConfig["seed"] = seed
-
-
-    # get model
-    model = SurvTraceSingle(STConfig)
-
-    return model
-
-def fit_surv_trace(model, X_train, y_train, X_val, y_val):
     hparams = {
         'batch_size': 64,
         'weight_decay': 1e-4,
         'learning_rate': 1e-3,
-        'epochs': 20,
+        'epochs': 40,
     }
+
+    # load data
+    df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, merged_df, X, y_df, train_idx, test_idx)
+
+    # get model
+    model = SurvTraceSingle(STConfig)
+
     # initialize a trainer
     trainer = Trainer(model)
-    train_loss, val_loss = trainer.fit((X_train, y_train), (X_val, y_val),
-                                       batch_size=hparams['batch_size'],
-                                       epochs=hparams['epochs'],
-                                       learning_rate=hparams['learning_rate'],
-                                       weight_decay=hparams['weight_decay'], )
-    return train_loss, val_loss
+    train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
+                                        batch_size=hparams['batch_size'],
+                                        epochs=hparams['epochs'],
+                                        learning_rate=hparams['learning_rate'],
+                                        weight_decay=hparams['weight_decay'], )
+    # evaluate model
+    evaluator = Evaluator(df, df_train.index)
+    evaluator.eval(model, (df_val, df_y_val))
+    print("done")
 
-def eval_survtrace(model, df, X_train, X_val, y_val):
-    evaluator = Evaluator(df, X_train.index)
-    result = evaluator.eval(model, (X_val, y_val))
-    print(result)
+    scores = []
+    for X_pred, y_pred in zip([df_train, df_val], [df_y_train, df_y_val]):
+        preds = model.predict(X_pred, batch_size=64)
+        scores.append(concordance_index_censored(y_pred["event"].astype(bool), y_pred["duration"], preds[:, -1]))
+
+    return model, scores[0], scores[1]

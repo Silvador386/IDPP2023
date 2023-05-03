@@ -141,11 +141,11 @@ def fastai_ccnames(df):
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-    cat_names = [*col_value_types["int8"],
+    cat_names = [*col_value_types["int8"], *col_value_types["int32"]
                  # *col_value_types["bool"], *col_value_types["object"],
                  ]
     cont_names = [*col_value_types["int64"], *col_value_types["float64"],
-                  *col_value_types["int32"]
+                  # *col_value_types["int32"]
                   ]
 
     cont_names.remove("outcome_occurred")
