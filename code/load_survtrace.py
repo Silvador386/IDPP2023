@@ -5,7 +5,7 @@ import pandas as pd
 import pdb
 
 from survtrace.survtrace.utils import LabelTransform
-from preprocessing import fastai_ccnames
+from preprocessing import fastai_ccnames, select_same_feature_col_names
 
 
 def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
@@ -18,11 +18,14 @@ def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
 
     if data == "idpp":
         # data processing, transform all continuous data to discrete
-        cols_categorical, cols_standardize = fastai_ccnames(X)
+
+        wrong = [col_name for col_name in X.columns.values.tolist() if col_name.endswith("_na")]
+        X = X.drop(wrong, axis=1)
+        cols_categorical, cols_standardize = fastai_ccnames(X)  # Works weirdly,
         df = pd.concat([X, y_df], axis=1).reset_index(drop=True)
         df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
-        y_df.index = df.index
-        y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
+        # y_df.index = df.index
+        # y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
 
         # evaluate the performance at the 25th, 50th and 75th event time quantile
         times = np.quantile(df["duration"][df["event"] == 1.0], horizons).tolist()
@@ -30,11 +33,11 @@ def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
 
         df_feat = df.drop(["duration", "event"], axis=1)
         df_feat_standardize = df_feat[cols_standardize]
-        df_feat_standardize_disc = StandardScaler().fit_transform(df_feat_standardize)
-        df_feat_standardize_disc = pd.DataFrame(df_feat_standardize_disc, columns=cols_standardize)
+        # df_feat_standardize_disc = StandardScaler().fit_transform(df_feat_standardize)
+        # df_feat_standardize_disc = pd.DataFrame(df_feat_standardize_disc, columns=cols_standardize)
 
         # must be categorical feature ahead of numerical features!
-        df_feat = pd.concat([df_feat[cols_categorical], df_feat_standardize_disc], axis=1)
+        df_feat = pd.concat([df_feat[cols_categorical], df_feat_standardize], axis=1)
 
         vocab_size = 0
         for _, feat in enumerate(cols_categorical):
@@ -45,7 +48,7 @@ def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
         # get the largest duraiton time
         max_duration_idx = df["duration"].argmax()
         if train_idx is None and val_idx is None:
-            df_test = df_feat.drop(max_duration_idx).sample(frac=0.1)
+            df_test = df_feat.drop(max_duration_idx).sample(frac=0.2)
             df_train = df_feat.drop(df_test.index)
             df_val = df_train.drop(max_duration_idx).sample(frac=0.1)
             df_train = df_train.drop(df_val.index)
@@ -65,7 +68,7 @@ def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
         df_y_val = pd.DataFrame(
             {"duration": y[0][df_val.index], "event": y[1][df_val.index], "proportion": y[2][df_val.index]},
             index=df_val.index)
-        # df_y_test = pd.DataFrame({"duration": y_struct[0][df_test.index], "event": y_struct[1][df_test.index],  "proportion": y_struct[2][df_test.index]}, index=df_test.index)
+        # df_y_test = pd.DataFrame({"duration": y[0][df_test.index], "event": y[1][df_test.index],  "proportion": y[2][df_test.index]}, index=df_test.index)
         if df_test.empty:
             df_y_test = pd.DataFrame()
         else:

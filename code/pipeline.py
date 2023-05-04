@@ -34,7 +34,7 @@ class IDPPPipeline:
     TEAM_SHORTCUT_T1 = "uwb_T1a_surfRF"
     TEAM_SHORTCUT_T2 = "uwb_T2a_surfRF"
     OUTPUT_DIR = "../out"
-    num_iter = 10
+    num_iter = 100
     train_size = 0.8
     n_estimators = 100
 
@@ -73,7 +73,6 @@ class IDPPPipeline:
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
 
-        run_survtrace(seed, self.merged_df, self.X, self.y)
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -101,7 +100,7 @@ class IDPPPipeline:
 
         predictions_train_df = self.predict(best_estimator, self.X, self.y_struct, save=False)
         predictions_test_df = self.predict(best_estimator, self.X_test, save=True)
-        cumulative_predictions_train_df = self.predict_cumulative(best_estimator, self.X, self.y_struct, save=False)
+        cumulative_predictions_train_df = self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
         cumulative_predictions_test_df = self.predict_cumulative(best_estimator, self.X_test, save=True)
 
     def run_model(self, model):

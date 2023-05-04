@@ -20,13 +20,12 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
     cox = CoxPHSurvivalAnalysis()
     surv_trace = SurvTraceWrap(seed, X, y_df)
 
-    estimators = {"SurvTRACE": surv_trace,
-                  "RandomForest": rsf,
+    estimators = {"RandomForest": rsf,
                   "GradientBoost": gbs,
                   # "MinlipSA": msa,
                   "CGBSA": cgb,
                   # "Cox": cox
-
+                  # "SurvTRACE": surv_trace,  # TODO data loading doesnt work
                   }
 
     return estimators
@@ -62,10 +61,6 @@ class SurvTraceWrap:
                                            learning_rate=hparams['learning_rate'],
                                            weight_decay=hparams['weight_decay'], )
 
-        # evaluate model
-        evaluator = Evaluator(df, df_train.index)
-        evaluator.eval(self.model, (df_val, df_y_val))
-        print("done")
 
         scores = []
         for X_pred, y_pred in zip([df_train, df_val], [df_y_train, df_y_val]):
@@ -77,6 +72,7 @@ class SurvTraceWrap:
     def predict(self, X):
         predictions = self.model.predict(X, batch_size=SurvTraceWrap.hparams["batch_size"])
         return predictions[:, -1]
+
 
 def run_survtrace(seed, merged_df, X, y_df, train_idx=None, test_idx=None):
     STConfig['data'] = 'idpp'
@@ -103,6 +99,9 @@ def run_survtrace(seed, merged_df, X, y_df, train_idx=None, test_idx=None):
                                         learning_rate=hparams['learning_rate'],
                                         weight_decay=hparams['weight_decay'], )
 
+    evaluator = Evaluator(df, df_train.index)
+    evaluator.eval(model, (df_test, df_y_test))
+    print("done")
 
     scores = []
     for X_pred, y_pred in zip([df_train, df_val], [df_y_train, df_y_val]):
