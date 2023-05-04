@@ -103,10 +103,10 @@ def preprocess(merged_df):
     merged_df = merged_df.set_index("patient_id")
 
     features_to_leave = [*features_to_encode,  *target_features,
-                         "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
-                         "delta_relapse_time0",
-                         # "time_since_onset", "diagnostic_delay",
-                         'altered_potential', 'potential_value', 'location', 'delta_evoked_potential_time0',
+                         # "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
+                         # "delta_relapse_time0",
+                         "time_since_onset", "diagnostic_delay",
+                         # 'altered_potential', 'potential_value', 'location', 'delta_evoked_potential_time0',
                          # 'multiple_sclerosis_type', #'delta_observation_time0',  # Might worsen the score
                          # "altered_potential",
                          # 'mri_area_label',
@@ -149,14 +149,15 @@ def fastai_ccnames(df):
         else:
             cont_names += col_value_types[type_name].to_list()
 
-    return cat_names, cont_names
-
-
-def fastai_tab(df, cat_names, cont_names, splits):
     if "outcome_occurred" in cont_names:
         cont_names.remove("outcome_occurred")
     if "outcome_time" in cont_names:
         cont_names.remove("outcome_time")
+
+    return cat_names, cont_names
+
+
+def fastai_tab(df, cat_names, cont_names, splits):
     to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
                        cat_names=cat_names,
                        cont_names=cont_names,
