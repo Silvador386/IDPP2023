@@ -63,7 +63,7 @@ def preprocess(merged_df):
                           ]
     for feature_cols in features_to_encode:
         merged_df = df_one_hot_encode(merged_df, feature_cols, drop_org=True)
-    #
+
     # ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
     #                "delta_evoked_potential_time0", "delta_relapse_time0"]
 
@@ -105,9 +105,9 @@ def preprocess(merged_df):
     features_to_leave = [*features_to_encode,  *target_features,
                          "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
                          "delta_relapse_time0",
-                         # "time_since_onset", "diagnostic_delay",
+                         "time_since_onset", "diagnostic_delay",
                          'altered_potential', 'potential_value', 'location', 'delta_evoked_potential_time0',
-                         # 'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
+                         'multiple_sclerosis_type', #'delta_observation_time0',  # Might worsen the score
                          # "altered_potential",
                          # 'mri_area_label',
                          # 'lesions_T1', 'lesions_T1_gadolinium',
@@ -131,8 +131,8 @@ def fastai_fill_split_xy(df, seed):
     splits = RandomSplitter(valid_pct=0.0, seed=seed)(range_of(df))
     cat_names, cont_names = fastai_ccnames(df)
 
-    X, (y, y_df), _, _ = fastai_tab(df, cat_names, cont_names, splits)
-    return X, y, y_df
+    X, y, y_struct, _, __, ___ = fastai_tab(df, cat_names, cont_names, splits)
+    return X, y, y_struct
 
 
 def fastai_ccnames(df):
@@ -144,7 +144,8 @@ def fastai_ccnames(df):
     cat_names = [*col_value_types["int8"], *col_value_types["int32"]
                  # *col_value_types["bool"], *col_value_types["object"],
                  ]
-    cont_names = [*col_value_types["int64"], *col_value_types["float64"],
+    cont_names = [*col_value_types["float64"],
+                  # *col_value_types["int64"],
                   # *col_value_types["int32"]
                   ]
 
@@ -161,25 +162,19 @@ def fastai_tab(df, cat_names, cont_names, splits):
                        y_names=["outcome_occurred", "outcome_time"],
                        splits=splits)
 
-    X_train, y_train = to.train.xs, to.train.ys.values.ravel()
-    X_valid, y_valid = to.valid.xs, to.valid.ys.values.ravel()
-
-    def y_to_struct_array(y, dtype):
-        y = np.array(
-            [(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y[::2], y[1::2])],
-            dtype=dtype)
-        return y
+    X_train, y_train_df = to.train.xs, to.train.ys
+    X_valid, y_valid_df = to.valid.xs, to.valid.ys
 
     struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
-    y_train_struct = y_to_struct_array(y_train, dtype=struct_dtype)
-    y_valid_struct = y_to_struct_array(y_valid, dtype=struct_dtype)
+    y_train_struct = y_to_struct_array(y_train_df, dtype=struct_dtype)
+    y_valid_struct = y_to_struct_array(y_valid_df, dtype=struct_dtype)
 
-    y_train_df = pd.DataFrame({"outcome_occurred": y_train[::2],
-                            "outcome_time": y_train[1::2]})
-    y_valid_df = pd.DataFrame({"outcome_occurred": y_valid[::2],
-                            "outcome_time": y_valid[1::2]})
+    return X_train, y_train_df, y_train_struct, X_valid, y_valid_df, y_valid_struct
 
-    return X_train, (y_train_struct, y_train_df), X_valid, (y_valid_struct, y_valid_df)
+
+def y_to_struct_array(y, dtype):
+    y = np.array([(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y.iloc[:, 0], y.iloc[:, 1])],dtype=dtype)
+    return y
 
 
 def fill_missing_edss(df, feature, specific_names, drop_na_all=True):
@@ -313,7 +308,7 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
         new_feature_name = f"altered_potential_({start_time}_{end_time})_sum"
         output_data[new_feature_name] = calculated_values
         calculated_values = np.apply_along_axis(count_not_nan, 1, potential_value)
-        new_feature_name = f"altered_potential_({start_time}_{end_time})_nnan"
+        new_feature_name = f"altered_potential_({start_time}_{end_time})_nan"
         output_data[new_feature_name] = calculated_values
 
     new_df = pd.DataFrame(output_data)

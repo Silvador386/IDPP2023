@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from io_dfs import read_dfs, save_predictions
-from merge_dfs import merge_dfs
-from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_split_xy
+from merge_dfs import merge_dfs, merge_multiple
+from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_split_xy, y_to_struct_array
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
@@ -44,10 +44,23 @@ class IDPPPipeline:
         self.id_feature = id_feature
         self.seed = seed
 
-        self.dfs = read_dfs(self.dataset_dir)
-        self.merged_df = merge_dfs(self.dfs, self.dataset_name, self.id_feature)
+        dataset_dirs = ["../data/datasetA_train", "../data/datasetA_test"]
+
+        multiple_merge_dfs = []
+        for data_dir, dataset_type in zip(dataset_dirs, ["train", "test"]):
+            dfs = read_dfs(data_dir)
+            multiple_merge_dfs.append(merge_dfs(dfs, self.dataset_name, self.id_feature, dataset_type))
+
+        self.patient_ids, self.merged_df = merge_multiple(multiple_merge_dfs, self.id_feature)
+        self.train_ids, self.test_ids = self.patient_ids
+
         self.merged_df = preprocess(self.merged_df)
-        self.X, self.y, self.y_df = fastai_fill_split_xy(self.merged_df, self.seed)
+
+        self.X, self.y, _ = fastai_fill_split_xy(self.merged_df, self.seed)
+        self.X_test = self.X.loc[self.test_ids]
+        self.X, self.y = self.X.loc[self.train_ids], self.y.loc[self.train_ids]
+        self.y_struct = y_to_struct_array(self.y, dtype=[('outcome_occurred', '?'), ('outcome_time', '<f8')])
+
 
         self.estimators = init_surv_estimators(self.seed, self.n_estimators)
 
@@ -59,86 +72,39 @@ class IDPPPipeline:
                        "seed": self.seed,
                        "n_estimators": self.n_estimators}
 
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_rest"
-
-        # X, y, y_df = self.X, self.y, self.y_df
-        #
-        # STConfig['data'] = 'idpp'
-        #
-        # STConfig['seed'] = seed
-        #
-        # hparams = {
-        #     'batch_size': 64,
-        #     'weight_decay': 1e-4,
-        #     'learning_rate': 1e-3,
-        #     'epochs': 40,
-        # }
-        #
-        # # %%
-        #
-        # # load data
-        # df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, self.merged_df, X, y_df)
-        #
-        # # get model
-        # model = SurvTraceSingle(STConfig)
-        #
-        # # initialize a trainer
-        # trainer = Trainer(model)
-        # train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
-        #                                    batch_size=hparams['batch_size'],
-        #                                    epochs=hparams['epochs'],
-        #                                    learning_rate=hparams['learning_rate'],
-        #                                    weight_decay=hparams['weight_decay'], )
-        #
-        # # evaluate model
-        # evaluator = Evaluator(df, df_train.index)
-        # evaluator.eval(model, (df_test, df_y_test))
-        # print("done")
-        #
-        # out = model.predict(df_test, batch_size=64)
-        # print(concordance_index_censored(df_y_test["event"].astype(bool), df_y_test["duration"], out[:, -1]))
-        # # print(out)
-        # y_df.index = X.index
-        # y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
-        #
-        # ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2 ** 10))
-        # for i, (train_idx, test_idx) in enumerate(ss.split(X, y)):
-        #
-        #     X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_df.iloc[train_idx], \
-        #                                          X.iloc[test_idx], y_df.iloc[test_idx]
-        #     survtrace_model = init_survtrace(seed)
-        #     train_loss, val_loss = fit_surv_trace(survtrace_model, X_train, y_train, X_valid, y_valid)
-        #
-        #
-        #     eval_survtrace(survtrace_model, X, X_train, X_valid, y_valid)
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_mriTDlTsO"
 
     def run(self):
-        acc, est = [], []
+        best_accs, avg_acc, best_est = [], [], []
         for name, models in self.estimators.items():
             self.wandb_run = setup_wandb(project=self.project, config=self.config, name=name, notes=self.notes)
             print(f"Estimator: {name}")
             train_c_scores, val_c_scores, best_acc, best_estimator = self.run_n_times(models, num_iter=self.num_iter)
-            acc.append(best_acc)
-            est.append(best_estimator)
+            best_accs.append(best_acc)
+            avg_acc.append(np.average(val_c_scores))
+            best_est.append(best_estimator)
             print(f"Train ({self.num_iter}iter) c-score: {np.average(train_c_scores)} ({np.std(train_c_scores)})")
             print(f"Val   ({self.num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
 
             if name == "CGBSA":
                 plot_coef_(best_estimator, self.X)
 
-            self.predict(best_estimator)
-            self.predict_cumulative(best_estimator, self.merged_df)
+            self.predict(best_estimator, self.X, self.y_struct, save=False)
+            self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
 
             self.wandb_run.finish()
 
-        best_estimator = est[np.array(acc).argmax()]
+        best_estimator_index = np.array(avg_acc).argmax()
+        best_estimator = best_est[best_estimator_index]
+        best_est_name = list(self.estimators.values())[best_estimator_index]
 
-        predictions_df = self.predict(best_estimator, save=True)
-        cumulative_predictions_df = self.predict_cumulative(best_estimator, self.merged_df, save=True)
-
+        predictions_train_df = self.predict(best_estimator, self.X, self.y_struct, save=False)
+        predictions_test_df = self.predict(best_estimator, self.X_test, save=True)
+        cumulative_predictions_train_df = self.predict_cumulative(best_estimator, self.X, self.y_struct, save=False)
+        cumulative_predictions_test_df = self.predict_cumulative(best_estimator, self.X_test, save=True)
 
     def run_model(self, model):
-        X, y, y_df = self.X, self.y, self.y_df
+        X, y, y_df = self.X, self.y_struct, self.y
         avg_scores = {"train": [], "test": [], "model": []}
         gss = GroupShuffleSplit(n_splits=10, train_size=self.train_size)
         group_kfold = GroupKFold(n_splits=2)
@@ -189,12 +155,10 @@ class IDPPPipeline:
         best_acc, best_estimator = (np.max(np.array(val_c_scores)), fitted_models[np.array(val_c_scores).argmax()])
         return np.array(train_c_scores), np.array(val_c_scores), best_acc, best_estimator
 
-    def predict(self, best_model, save=False):
-        X, y = self.X, self.y
-
+    def predict(self, best_model, X, y=None, save=False):
         c_score, predictions = evaluate_c(best_model, X, y)
 
-        pred_output = {self.id_feature: self.merged_df.index,
+        pred_output = {self.id_feature: self.X.index,
                        "predictions": predictions,
                        "run": self.TEAM_SHORTCUT_T1}
 
@@ -206,13 +170,12 @@ class IDPPPipeline:
             save_predictions(self.OUTPUT_DIR, self.TEAM_SHORTCUT_T1, pred_df)
         return pred_df
 
-    def predict_cumulative(self, best_model, df, save=False):
-        X, y = self.X, self.y
+    def predict_cumulative(self, best_model, X, y=None, save=False):
         time_points = [2, 4, 6, 8, 10]
-        auc_scores, predictions = evaluate_cumulative(best_model, y_train=y, X_val=X, y_val=y, time_points=time_points,
+        auc_scores, predictions = evaluate_cumulative(best_model, X, y, time_points=time_points,
                                                       plot=True)
 
-        pred_output = {self.id_feature: df.index,
+        pred_output = {self.id_feature: X.index,
                        "2years": predictions[:, 0],
                        "4years": predictions[:, 1],
                        "6years": predictions[:, 2],

@@ -58,14 +58,14 @@ def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
         # assign cuts
         labtrans = LabelTransform(cuts=np.array([df["duration"].min()] + times + [df["duration"].max()]))
         labtrans.fit(*get_target(df.loc[df_train.index]))
-        y = labtrans.transform(*get_target(df))  # y = (discrete duration, event indicator)
+        y = labtrans.transform(*get_target(df))  # y_struct = (discrete duration, event indicator)
         df_y_train = pd.DataFrame(
             {"duration": y[0][df_train.index], "event": y[1][df_train.index], "proportion": y[2][df_train.index]},
             index=df_train.index)
         df_y_val = pd.DataFrame(
             {"duration": y[0][df_val.index], "event": y[1][df_val.index], "proportion": y[2][df_val.index]},
             index=df_val.index)
-        # df_y_test = pd.DataFrame({"duration": y[0][df_test.index], "event": y[1][df_test.index],  "proportion": y[2][df_test.index]}, index=df_test.index)
+        # df_y_test = pd.DataFrame({"duration": y_struct[0][df_test.index], "event": y_struct[1][df_test.index],  "proportion": y_struct[2][df_test.index]}, index=df_test.index)
         if df_test.empty:
             df_y_test = pd.DataFrame()
         else:

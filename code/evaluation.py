@@ -9,16 +9,19 @@ from sksurv.linear_model import CoxPHSurvivalAnalysis
 from sklearn.model_selection import train_test_split
 
 
-def evaluate_c(model, X, y):
-    y_occ, y_time = [val[0] for val in y], [val[1] for val in y]
+def evaluate_c(model, X, y=None):
     prediction_scores = model.predict(X)
     prediction_scores = resize_pred_scores_by_order(prediction_scores)
 
-    c_score = concordance_index_censored(y_occ, y_time, prediction_scores)[0]
+    if y is not None:
+        y_occ, y_time = [val[0] for val in y], [val[1] for val in y]
+        c_score = concordance_index_censored(y_occ, y_time, prediction_scores)[0]
 
-    c_score_check = model.score(X, y)
-    if abs(c_score - c_score_check) > 1e5:
-        print("Warning: C-Score not same after resize!")
+        c_score_check = model.score(X, y)
+        if abs(c_score - c_score_check) > 1e5:
+            print("Warning: C-Score not same after resize!")
+    else:
+        c_score = None
     return c_score, prediction_scores
 
 
@@ -26,10 +29,10 @@ def wrap_c_scorer(estimator, X_test, y_test):
     return evaluate_c(estimator, X_test, y_test)[0]
 
 
-def evaluate_cumulative(model, y_train, X_val, y_val, time_points=None, plot=False):
+def evaluate_cumulative(model, X, y=None, time_points=None, plot=False):
     if time_points is None:
         time_points = [2, 4, 6, 8, 10]
-    pred_surv = model.predict_cumulative_hazard_function(X_val)
+    pred_surv = model.predict_cumulative_hazard_function(X)
 
     predictions = []
     for i, surv_func in enumerate(pred_surv):
@@ -47,13 +50,12 @@ def evaluate_cumulative(model, y_train, X_val, y_val, time_points=None, plot=Fal
         plt.show()
 
     predictions = np.array(predictions)
-    auc_pre_resize = cumulative_dynamic_auc(y_val, y_val, predictions, time_points)
-
     predictions = resize_pred_scores_by_order(predictions)
-    auc_scores = cumulative_dynamic_auc(y_val, y_val, predictions, time_points)
 
-    if np.any(np.abs(auc_pre_resize[0] - auc_scores[0])) > 1e5:
-        print("Warning: AUC-Scores are not same after resize!")
+    if y is not None:
+        auc_scores = cumulative_dynamic_auc(y[0], y[1], predictions, time_points)
+    else:
+        auc_scores = None
     return auc_scores, predictions
 
 
