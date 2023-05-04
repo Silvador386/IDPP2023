@@ -36,7 +36,7 @@ class IDPPPipeline:
     OUTPUT_DIR = "../out"
     num_iter = 100
     train_size = 0.8
-    n_estimators = 200
+    n_estimators = 100
 
     def __init__(self, dataset_dir, dataset_name, id_feature, seed):
         self.dataset_dir = dataset_dir
@@ -72,7 +72,7 @@ class IDPPPipeline:
                        "seed": self.seed,
                        "n_estimators": self.n_estimators}
 
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_mriTDlTsO"
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -104,16 +104,16 @@ class IDPPPipeline:
         cumulative_predictions_test_df = self.predict_cumulative(best_estimator, self.X_test, save=True)
 
     def run_model(self, model):
-        X, y, y_df = self.X, self.y_struct, self.y
+        X, y_struct, y_df = self.X, self.y_struct, self.y
         avg_scores = {"train": [], "test": [], "model": []}
-        gss = GroupShuffleSplit(n_splits=10, train_size=self.train_size)
-        group_kfold = GroupKFold(n_splits=2)
-        groups = y_df["outcome_occurred"].to_numpy()
+        # gss = GroupShuffleSplit(n_splits=10, train_size=self.train_size)
+        # group_kfold = GroupKFold(n_splits=2)
+        # groups = y_df["outcome_occurred"].to_numpy()
 
         ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2**10))
-        for i, (train_idx, test_idx) in enumerate(ss.split(X, y)):
-            X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y[train_idx], \
-                                                 X.iloc[test_idx], y[test_idx]
+        for i, (train_idx, test_idx) in enumerate(ss.split(X, y_struct)):
+            X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_struct[train_idx], \
+                                                 X.iloc[test_idx], y_struct[test_idx]
 
             if model == "SurvTRACE":
                 model, train_c_score, test_c_score = run_survtrace(self.seed, self.merged_df, X, y_df, train_idx, test_idx)
@@ -158,7 +158,7 @@ class IDPPPipeline:
     def predict(self, best_model, X, y=None, save=False):
         c_score, predictions = evaluate_c(best_model, X, y)
 
-        pred_output = {self.id_feature: self.X.index,
+        pred_output = {self.id_feature: X.index,
                        "predictions": predictions,
                        "run": self.TEAM_SHORTCUT_T1}
 

@@ -105,9 +105,9 @@ def preprocess(merged_df):
     features_to_leave = [*features_to_encode,  *target_features,
                          "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
                          "delta_relapse_time0",
-                         "time_since_onset", "diagnostic_delay",
+                         # "time_since_onset", "diagnostic_delay",
                          'altered_potential', 'potential_value', 'location', 'delta_evoked_potential_time0',
-                         'multiple_sclerosis_type', #'delta_observation_time0',  # Might worsen the score
+                         # 'multiple_sclerosis_type', #'delta_observation_time0',  # Might worsen the score
                          # "altered_potential",
                          # 'mri_area_label',
                          # 'lesions_T1', 'lesions_T1_gadolinium',
