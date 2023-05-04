@@ -34,7 +34,7 @@ class IDPPPipeline:
     TEAM_SHORTCUT_T1 = "uwb_T1a_surfRF"
     TEAM_SHORTCUT_T2 = "uwb_T2a_surfRF"
     OUTPUT_DIR = "../out"
-    num_iter = 100
+    num_iter = 10
     train_size = 0.8
     n_estimators = 100
 
@@ -61,8 +61,7 @@ class IDPPPipeline:
         self.X, self.y = self.X.loc[self.train_ids], self.y.loc[self.train_ids]
         self.y_struct = y_to_struct_array(self.y, dtype=[('outcome_occurred', '?'), ('outcome_time', '<f8')])
 
-
-        self.estimators = init_surv_estimators(self.seed, self.n_estimators)
+        self.estimators = init_surv_estimators(self.seed, self.X, self.y, self.n_estimators)
 
         self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
         self.config = {"column_names": list(self.X.columns.values),
@@ -73,6 +72,8 @@ class IDPPPipeline:
                        "n_estimators": self.n_estimators}
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
+
+        run_survtrace(seed, self.merged_df, self.X, self.y)
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -115,13 +116,15 @@ class IDPPPipeline:
             X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_struct[train_idx], \
                                                  X.iloc[test_idx], y_struct[test_idx]
 
-            if model == "SurvTRACE":
-                model, train_c_score, test_c_score = run_survtrace(self.seed, self.merged_df, X, y_df, train_idx, test_idx)
+            # if model == "SurvTRACE":
+            #     model, train_c_score, test_c_score = run_survtrace(self.seed, self.merged_df, X, y_df, train_idx, test_idx)
+            # else:
+            if model.__class__.__name__ == "SurvTraceWrap":
+                model.fit(X, y_df, train_idx, test_idx)
             else:
                 model.fit(X_train, y_train)
-
-                train_c_score, _ = evaluate_c(model, X_train, y_train)
-                test_c_score, _ = evaluate_c(model, X_valid, y_valid)
+            train_c_score, _ = evaluate_c(model, X_train, y_train)
+            test_c_score, _ = evaluate_c(model, X_valid, y_valid)
             avg_scores["train"].append(train_c_score)
             avg_scores["test"].append(test_c_score)
             avg_scores["model"].append(model)
@@ -220,12 +223,12 @@ class IDPPPipeline:
 def main():
     DEFAULT_RANDOM_SEED = 2021  # random.randint(0, 2**10)
 
-    def seedBasic(seed=DEFAULT_RANDOM_SEED):
+    def seed_basic(seed=DEFAULT_RANDOM_SEED):
         random.seed(seed)
         os.environ['PYTHONHASHSEED'] = str(seed)
         np.random.seed(seed)
 
-    seedBasic(DEFAULT_RANDOM_SEED)
+    seed_basic(DEFAULT_RANDOM_SEED)
 
     DATASET = "datasetA"
     DATASET_DIR = f"../data/{DATASET}_train"

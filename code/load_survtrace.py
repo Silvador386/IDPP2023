@@ -18,15 +18,15 @@ def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
 
     if data == "idpp":
         # data processing, transform all continuous data to discrete
-        cols_categorical, cols_standardize = fastai_ccnames(merged_df)
-        df = pd.concat([X.reset_index(), y_df], axis=1)
+        cols_categorical, cols_standardize = fastai_ccnames(X)
+        df = pd.concat([X, y_df], axis=1).reset_index(drop=True)
         df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
-        y_df.index = X.index
+        y_df.index = df.index
         y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
 
         # evaluate the performance at the 25th, 50th and 75th event time quantile
-        times = np.quantile(df["duration"][df["event"] == 1.0], [1]).tolist()
-        times = [2, 4, 6, 8, 10, *times]
+        times = np.quantile(df["duration"][df["event"] == 1.0], horizons).tolist()
+        # times = [2, 4, 6, 8, 10, *times]
 
         df_feat = df.drop(["duration", "event"], axis=1)
         df_feat_standardize = df_feat[cols_standardize]

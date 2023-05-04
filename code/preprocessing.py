@@ -141,21 +141,22 @@ def fastai_ccnames(df):
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
 
     col_value_types = {f"{key}": value for key, value in col_value_types.items()}
-    cat_names = [*col_value_types["int8"], *col_value_types["int32"]
-                 # *col_value_types["bool"], *col_value_types["object"],
-                 ]
-    cont_names = [*col_value_types["float64"],
-                  # *col_value_types["int64"],
-                  # *col_value_types["int32"]
-                  ]
 
-    cont_names.remove("outcome_occurred")
-    cont_names.remove("outcome_time")
+    cat_names, cont_names = [], []
+    for type_name in col_value_types.keys():
+        if type_name in ["int8", "int32", "bool", "object"]:
+            cat_names += col_value_types[type_name].to_list()
+        else:
+            cont_names += col_value_types[type_name].to_list()
 
     return cat_names, cont_names
 
 
 def fastai_tab(df, cat_names, cont_names, splits):
+    if "outcome_occurred" in cont_names:
+        cont_names.remove("outcome_occurred")
+    if "outcome_time" in cont_names:
+        cont_names.remove("outcome_time")
     to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
                        cat_names=cat_names,
                        cont_names=cont_names,
