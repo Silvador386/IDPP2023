@@ -33,12 +33,14 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
 
 
 def init_model(seed, **params):
-    rsf = RandomSurvivalForest(n_jobs=6, random_state=seed, **params)
-    estimators = {
-        "RandomForest": rsf,
-    }
+    # rsf = RandomSurvivalForest(n_jobs=6, random_state=seed, **params)
+    # gbs = GradientBoostingSurvivalAnalysis(random_state=seed, **params)
+    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(random_state=seed, **params)
+    # estimators = {
+    #     "RandomForest": rsf,
+    # }
 
-    return rsf
+    return cgb
 
 class SurvTraceWrap:
     hparams = {
@@ -48,18 +50,28 @@ class SurvTraceWrap:
         'epochs': 20,
     }
 
-    def __init__(self, seed, X, y_df):
-        pass
-        # # Update config
-        # df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df)
-        # # get model
-        # self.model = SurvTraceSingle(STConfig)
-        # self.trainer = Trainer(self.model)
-
-    def fit(self, X, y_df, train_idx, val_idx, test_c=True):
+    def __init__(self, seed, X, y_df, wandb_run=None, **params):
+        self.seed = seed
         STConfig['data'] = 'idpp'
-        STConfig['seed'] = 2021
-        hparams = SurvTraceWrap.hparams
+        STConfig['seed'] = self.seed
+        if params:
+            STConfig.update(**params)
+            self.hparams = {'batch_size': params['batch_size'],
+                            'weight_decay': params['weight_decay'],
+                            'learning_rate': params['learning_rate'],
+                            'epochs': params['epochs'],
+                            }
+        else:
+            self.hparams = SurvTraceWrap.hparams
+        if wandb_run:
+            self.wandb_run = wandb_run
+        df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df)
+        # self.model = SurvTraceSingle(STConfig)
+
+    def fit(self, X, y_df, train_idx, val_idx, test_c=True, ):
+        # STConfig['data'] = 'idpp'
+        # STConfig['seed'] = self.seed
+        hparams = self.hparams
         df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df, train_idx,
                                                                                    val_idx)
         self.model = SurvTraceSingle(STConfig)
@@ -76,7 +88,11 @@ class SurvTraceWrap:
             preds = self.model.predict(X_pred, batch_size=64)
             scores.append(concordance_index_censored(y_df.iloc[indexes]["outcome_occurred"].astype(bool),
                                                      y_df.iloc[indexes]["outcome_time"], preds[:, -1])[0])
-            print(preds)
+
+        if self.wandb_run:
+            self.wandb_run.log({f"Train Loss": scores[0],
+                                f"Val Loss": scores[1],
+                                })
         print(f"SurfTrace Scores: {scores}")
         return self.model, scores[0], scores[1]
 

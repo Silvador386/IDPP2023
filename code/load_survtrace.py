@@ -30,7 +30,7 @@ def load_data(config, X, y_df, train_idx=None, val_idx=None):
 
         # evaluate the performance at the 25th, 50th and 75th event time quantile
         times = np.quantile(df["duration"][df["event"] == 1.0], horizons).tolist()
-        # times = [2, 4, 6, 8, 10, *times]
+        # times = [2, 4, 6, 8, 10]
 
         df_feat = df.drop(["duration", "event"], axis=1)
         df_feat_standardize = df_feat[cols_standardize]

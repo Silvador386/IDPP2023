@@ -12,7 +12,7 @@ from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_sp
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
-from survEstimators import init_surv_estimators, init_model, run_survtrace
+from survEstimators import init_surv_estimators, init_model, run_survtrace, SurvTraceWrap
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
 from wandbsetup import setup_wandb, launch_sweep
@@ -64,7 +64,7 @@ class IDPPPipeline:
         self.team_shortcut_t1 = "uwb_T1a_{}"
         self.team_shortcut_t2 = "uwb_T2a_{}"
 
-        self.project = f"IDPP-CLEF-{dataset_name[-1]}_GB_sweep"
+        self.project = f"IDPP-CLEF-{dataset_name[-1]}_ST_sweep"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
                        "num_iter": self.num_iter,
@@ -200,7 +200,7 @@ class IDPPPipeline:
     def train_sweep_wrap(self, ):
         with wandb.init():
             params = {**wandb.config}
-            model = init_model(self.seed, **params)
+            model = SurvTraceWrap(self.seed, self.X, self.y, **params)
             train_c_score, val_c_score, fitted_model = self.run_model(model, self.seed)
             wandb.log({f"Train C-Score": train_c_score[0],
                        f"Val C-Score": val_c_score[0],
