@@ -106,7 +106,7 @@ def preprocess(merged_df):
                          "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
                          "delta_relapse_time0",
                          "time_since_onset", "diagnostic_delay",
-                         'altered_potential', # TODO doesnt work with transformer
+                         'altered_potential',  # TODO doesnt work with transformer
                          'potential_value', 'location', 'delta_evoked_potential_time0',
                          # 'multiple_sclerosis_type', #'delta_observation_time0',  # Might worsen the score
                          # "altered_potential",
@@ -145,7 +145,7 @@ def fastai_ccnames(df):
 
     cat_names, cont_names = [], []
     for type_name in col_value_types.keys():
-        if type_name in ["int8", "int32", "bool", "object"]:
+        if type_name in ["int8", "int32",  "bool", "object"]:
             cat_names += col_value_types[type_name].to_list()
         else:
             cont_names += col_value_types[type_name].to_list()

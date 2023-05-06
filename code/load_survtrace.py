@@ -8,7 +8,7 @@ from survtrace.survtrace.utils import LabelTransform
 from preprocessing import fastai_ccnames, select_same_feature_col_names
 
 
-def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
+def load_data(config, X, y_df, train_idx=None, val_idx=None):
     '''load data, return updated configuration.
     '''
     data = config['data']
@@ -19,10 +19,11 @@ def load_data(config, merged_df, X, y_df, train_idx=None, val_idx=None):
     if data == "idpp":
         # data processing, transform all continuous data to discrete
 
-        wrong = [col_name for col_name in X.columns.values.tolist() if col_name.endswith("_na")]
-        X = X.drop(wrong, axis=1)
+        # wrong = [col_name for col_name in X.columns.values.tolist() if col_name.endswith("_na")]
+        # X = X.drop(wrong, axis=1)
         cols_categorical, cols_standardize = fastai_ccnames(X)  # Works weirdly,
         df = pd.concat([X, y_df], axis=1).reset_index(drop=True)
+        df[cols_categorical] = df[cols_categorical].astype(np.int32)  # default int8 overflows
         df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
         # y_df.index = df.index
         # y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)

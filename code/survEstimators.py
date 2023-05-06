@@ -20,12 +20,12 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
     cox = CoxPHSurvivalAnalysis()
     surv_trace = SurvTraceWrap(seed, X, y_df)
 
-    estimators = {"RandomForest": rsf,
+    estimators = {"SurvTRACE": surv_trace,
+                  "RandomForest": rsf,
                   "GradientBoost": gbs,
                   # "MinlipSA": msa,
                   "CGBSA": cgb,
                   # "Cox": cox
-                  # "SurvTRACE": surv_trace,  # TODO data loading doesnt work
                   }
 
     return estimators
@@ -36,7 +36,7 @@ class SurvTraceWrap:
         'batch_size': 64,
         'weight_decay': 1e-4,
         'learning_rate': 1e-3,
-        'epochs': 40,
+        'epochs': 20,
     }
 
     def __init__(self, seed, X, y_df):
@@ -63,10 +63,12 @@ class SurvTraceWrap:
 
 
         scores = []
-        for X_pred, y_pred in zip([df_train, df_val], [df_y_train, df_y_val]):
+        for X_pred, indexes in zip([df_train, df_val], [train_idx, val_idx]):
             preds = self.model.predict(X_pred, batch_size=64)
-            scores.append(concordance_index_censored(y_pred["event"].astype(bool), y_pred["duration"], preds[:, -1]))
-
+            scores.append(concordance_index_censored(y_df.iloc[indexes]["outcome_occurred"].astype(bool),
+                                                     y_df.iloc[indexes]["outcome_time"], preds[:, -1])[0])
+            print(preds)
+        print(f"SurfTrace Scores: {scores}")
         return self.model, scores[0], scores[1]
 
     def predict(self, X):
@@ -74,7 +76,7 @@ class SurvTraceWrap:
         return predictions[:, -1]
 
 
-def run_survtrace(seed, merged_df, X, y_df, train_idx=None, test_idx=None):
+def run_survtrace(seed, X, y_df, train_idx=None, test_idx=None):
     STConfig['data'] = 'idpp'
     STConfig['seed'] = seed
 
@@ -86,7 +88,7 @@ def run_survtrace(seed, merged_df, X, y_df, train_idx=None, test_idx=None):
     }
 
     # load data
-    df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, merged_df, X, y_df, train_idx, test_idx)
+    df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df, train_idx, test_idx)
 
     # get model
     model = SurvTraceSingle(STConfig)

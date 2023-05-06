@@ -31,8 +31,6 @@ set_config(display="text")  # displays text representation of estimators
 
 
 class IDPPPipeline:
-    TEAM_SHORTCUT_T1 = "uwb_T1a_surfRF"
-    TEAM_SHORTCUT_T2 = "uwb_T2a_surfRF"
     OUTPUT_DIR = "../out"
     num_iter = 100
     train_size = 0.8
@@ -63,6 +61,9 @@ class IDPPPipeline:
 
         self.estimators = init_surv_estimators(self.seed, self.X, self.y, self.n_estimators)
 
+        self.team_shortcut_t1 = "uwb_T1a_{}"
+        self.team_shortcut_t2 = "uwb_T2a_{}"
+
         self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
@@ -73,6 +74,7 @@ class IDPPPipeline:
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
 
+        run_survtrace(seed, self.X, self.y)
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -96,7 +98,10 @@ class IDPPPipeline:
 
         best_estimator_index = np.array(avg_acc).argmax()
         best_estimator = best_est[best_estimator_index]
-        best_est_name = list(self.estimators.values())[best_estimator_index]
+        best_est_name = list(self.estimators.keys())[best_estimator_index]
+
+        self.team_shortcut_t1 = self.team_shortcut_t1.format(best_est_name)
+        self.team_shortcut_t2 = self.team_shortcut_t2.format(best_est_name)
 
         predictions_train_df = self.predict(best_estimator, self.X, self.y_struct, save=False)
         predictions_test_df = self.predict(best_estimator, self.X_test, save=True)
@@ -119,11 +124,11 @@ class IDPPPipeline:
             #     model, train_c_score, test_c_score = run_survtrace(self.seed, self.merged_df, X, y_df, train_idx, test_idx)
             # else:
             if model.__class__.__name__ == "SurvTraceWrap":
-                model.fit(X, y_df, train_idx, test_idx)
+                _, train_c_score, test_c_score = model.fit(X, y_df, train_idx, test_idx)
             else:
                 model.fit(X_train, y_train)
-            train_c_score, _ = evaluate_c(model, X_train, y_train)
-            test_c_score, _ = evaluate_c(model, X_valid, y_valid)
+                train_c_score, _ = evaluate_c(model, X_train, y_train)
+                test_c_score, _ = evaluate_c(model, X_valid, y_valid)
             avg_scores["train"].append(train_c_score)
             avg_scores["test"].append(test_c_score)
             avg_scores["model"].append(model)
@@ -162,14 +167,14 @@ class IDPPPipeline:
 
         pred_output = {self.id_feature: X.index,
                        "predictions": predictions,
-                       "run": self.TEAM_SHORTCUT_T1}
+                       "run": self.team_shortcut_t1}
 
         print(best_model.__class__.__name__)
         print(f"Predictions C-Index Resized:", c_score)
         pred_df = pd.DataFrame(pred_output)
 
         if save:
-            save_predictions(self.OUTPUT_DIR, self.TEAM_SHORTCUT_T1, pred_df)
+            save_predictions(self.OUTPUT_DIR, self.team_shortcut_t1, pred_df)
         return pred_df
 
     def predict_cumulative(self, best_model, X, y=None, save=False):
@@ -183,11 +188,11 @@ class IDPPPipeline:
                        "6years": predictions[:, 2],
                        "8years": predictions[:, 3],
                        "10years": predictions[:, 4],
-                       "run": self.TEAM_SHORTCUT_T2}
+                       "run": self.team_shortcut_t2}
         print("AUC Scores whole", auc_scores)
         pred_df = pd.DataFrame(pred_output)
         if save:
-            save_predictions(self.OUTPUT_DIR, self.TEAM_SHORTCUT_T2, pred_df)
+            save_predictions(self.OUTPUT_DIR, self.team_shortcut_t2, pred_df)
 
         return pred_df
 
