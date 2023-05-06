@@ -200,7 +200,7 @@ class IDPPPipeline:
     def train_sweep_wrap(self, ):
         with wandb.init():
             params = {**wandb.config}
-            model = SurvTraceWrap(self.seed, self.X, self.y, **params)
+            model = SurvTraceWrap(self.seed, self.X, self.y, wandb, **params)
             train_c_score, val_c_score, fitted_model = self.run_model(model, self.seed)
             wandb.log({f"Train C-Score": train_c_score[0],
                        f"Val C-Score": val_c_score[0],

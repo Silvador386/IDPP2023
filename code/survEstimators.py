@@ -86,13 +86,15 @@ class SurvTraceWrap:
         scores = []
         for X_pred, indexes in zip([df_train, df_val], [train_idx, val_idx]):
             preds = self.model.predict(X_pred, batch_size=64)
+            preds = preds.cpu()
             scores.append(concordance_index_censored(y_df.iloc[indexes]["outcome_occurred"].astype(bool),
                                                      y_df.iloc[indexes]["outcome_time"], preds[:, -1])[0])
 
-        if self.wandb_run:
-            self.wandb_run.log({f"Train Loss": scores[0],
-                                f"Val Loss": scores[1],
-                                })
+        if self.wandb_run is not None:
+            for train_loss, val_loss in zip(train_loss, val_loss):
+                self.wandb_run.log({f"Train Loss": train_loss,
+                                    f"Val Loss": val_loss,
+                                    })
         print(f"SurfTrace Scores: {scores}")
         return self.model, scores[0], scores[1]
 
