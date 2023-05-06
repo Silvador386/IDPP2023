@@ -12,10 +12,10 @@ from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_sp
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
-from survEstimators import init_surv_estimators, run_survtrace
+from survEstimators import init_surv_estimators, init_model, run_survtrace
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
-from wandbsetup import setup_wandb
+from wandbsetup import setup_wandb, launch_sweep
 import wandb
 from sklearn import set_config
 
@@ -64,7 +64,7 @@ class IDPPPipeline:
         self.team_shortcut_t1 = "uwb_T1a_{}"
         self.team_shortcut_t2 = "uwb_T2a_{}"
 
-        self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
+        self.project = f"IDPP-CLEF-{dataset_name[-1]}_GB_sweep"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
                        "num_iter": self.num_iter,
@@ -74,7 +74,7 @@ class IDPPPipeline:
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
 
-        run_survtrace(seed, self.X, self.y)
+        # run_survtrace(seed, self.X, self.y)
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -108,23 +108,20 @@ class IDPPPipeline:
         cumulative_predictions_train_df = self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
         cumulative_predictions_test_df = self.predict_cumulative(best_estimator, self.X_test, save=True)
 
-    def run_model(self, model):
+    def run_model(self, model, random_state):
         X, y_struct, y_df = self.X, self.y_struct, self.y
         avg_scores = {"train": [], "test": [], "model": []}
         # gss = GroupShuffleSplit(n_splits=10, train_size=self.train_size)
         # group_kfold = GroupKFold(n_splits=2)
         # groups = y_df["outcome_occurred"].to_numpy()
 
-        ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random.randint(0, 2**10))
+        ss = ShuffleSplit(n_splits=1, train_size=self.train_size, random_state=random_state)
         for i, (train_idx, test_idx) in enumerate(ss.split(X, y_struct)):
             X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_struct[train_idx], \
                                                  X.iloc[test_idx], y_struct[test_idx]
 
-            # if model == "SurvTRACE":
-            #     model, train_c_score, test_c_score = run_survtrace(self.seed, self.merged_df, X, y_df, train_idx, test_idx)
-            # else:
             if model.__class__.__name__ == "SurvTraceWrap":
-                _, train_c_score, test_c_score = model.fit(X, y_df, train_idx, test_idx)
+                model, train_c_score, test_c_score = model.fit(X, y_df, train_idx, test_idx)
             else:
                 model.fit(X_train, y_train)
                 train_c_score, _ = evaluate_c(model, X_train, y_train)
@@ -141,7 +138,7 @@ class IDPPPipeline:
             error_flag = True
             while error_flag:
                 try:
-                    train_c_score, val_c_score, fitted_model = self.run_model(model)
+                    train_c_score, val_c_score, fitted_model = self.run_model(model, random_state=random.randint(0, 2**10))
                     train_c_scores += train_c_score
                     val_c_scores += val_c_score
                     fitted_models += fitted_model
@@ -196,6 +193,20 @@ class IDPPPipeline:
 
         return pred_df
 
+    def param_sweep(self):
+        sweep_id = launch_sweep(self.project, self.notes, self.config)
+        wandb.agent(sweep_id, function=self.train_sweep_wrap)
+
+    def train_sweep_wrap(self, ):
+        with wandb.init():
+            params = {**wandb.config}
+            model = init_model(self.seed, **params)
+            train_c_score, val_c_score, fitted_model = self.run_model(model, self.seed)
+            wandb.log({f"Train C-Score": train_c_score[0],
+                       f"Val C-Score": val_c_score[0],
+                       })
+
+
     def run_ensemble(self):
         from sksurv.meta import EnsembleSelection, EnsembleSelectionRegressor, Stacking
 
@@ -239,8 +250,8 @@ def main():
     ID_FEAT = "patient_id"
 
     pipeline = IDPPPipeline(DATASET_DIR, DATASET, ID_FEAT, DEFAULT_RANDOM_SEED)
-    pipeline.run()
-
+    # pipeline.run()
+    pipeline.param_sweep()
 
 if __name__ == "__main__":
     main()

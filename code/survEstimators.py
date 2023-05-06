@@ -20,16 +20,25 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
     cox = CoxPHSurvivalAnalysis()
     surv_trace = SurvTraceWrap(seed, X, y_df)
 
-    estimators = {"SurvTRACE": surv_trace,
-                  "RandomForest": rsf,
-                  "GradientBoost": gbs,
-                  # "MinlipSA": msa,
-                  "CGBSA": cgb,
-                  # "Cox": cox
-                  }
+    estimators = {
+        # "SurvTRACE": surv_trace,
+        "RandomForest": rsf,
+        "GradientBoost": gbs,
+        # "MinlipSA": msa,
+        "CGBSA": cgb,
+        # "Cox": cox
+    }
 
     return estimators
 
+
+def init_model(seed, **params):
+    rsf = RandomSurvivalForest(n_jobs=6, random_state=seed, **params)
+    estimators = {
+        "RandomForest": rsf,
+    }
+
+    return rsf
 
 class SurvTraceWrap:
     hparams = {
@@ -51,16 +60,16 @@ class SurvTraceWrap:
         STConfig['data'] = 'idpp'
         STConfig['seed'] = 2021
         hparams = SurvTraceWrap.hparams
-        df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df, train_idx, val_idx)
+        df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df, train_idx,
+                                                                                   val_idx)
         self.model = SurvTraceSingle(STConfig)
         self.trainer = Trainer(self.model)
 
         train_loss, val_loss = self.trainer.fit((df_train, df_y_train), (df_val, df_y_val),
-                                           batch_size=hparams['batch_size'],
-                                           epochs=hparams['epochs'],
-                                           learning_rate=hparams['learning_rate'],
-                                           weight_decay=hparams['weight_decay'], )
-
+                                                batch_size=hparams['batch_size'],
+                                                epochs=hparams['epochs'],
+                                                learning_rate=hparams['learning_rate'],
+                                                weight_decay=hparams['weight_decay'], )
 
         scores = []
         for X_pred, indexes in zip([df_train, df_val], [train_idx, val_idx]):
@@ -96,10 +105,10 @@ def run_survtrace(seed, X, y_df, train_idx=None, test_idx=None):
     # initialize a trainer
     trainer = Trainer(model)
     train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
-                                        batch_size=hparams['batch_size'],
-                                        epochs=hparams['epochs'],
-                                        learning_rate=hparams['learning_rate'],
-                                        weight_decay=hparams['weight_decay'], )
+                                       batch_size=hparams['batch_size'],
+                                       epochs=hparams['epochs'],
+                                       learning_rate=hparams['learning_rate'],
+                                       weight_decay=hparams['weight_decay'], )
 
     evaluator = Evaluator(df, df_train.index)
     evaluator.eval(model, (df_test, df_y_test))
