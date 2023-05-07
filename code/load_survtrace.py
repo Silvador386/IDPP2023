@@ -13,23 +13,19 @@ def load_data(config, X, y_df, train_idx=None, val_idx=None):
     '''
     data = config['data']
     horizons = config['horizons']
+    times = config["times"]
     assert data in ["idpp", "metabric", "nwtco", "support", "gbsg", "flchain", "seer", ], "Data Not Found!"
     get_target = lambda df: (df['duration'].values, df['event'].values)
 
     if data == "idpp":
         # data processing, transform all continuous data to discrete
-
-        # wrong = [col_name for col_name in X.columns.values.tolist() if col_name.endswith("_na")]
-        # X = X.drop(wrong, axis=1)
         cols_categorical, cols_standardize = fastai_ccnames(X)  # Works weirdly,
         df = pd.concat([X, y_df], axis=1).reset_index(drop=True)
         df[cols_categorical] = df[cols_categorical].astype(np.int32)  # default int8 overflows
         df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
-        # y_df.index = df.index
-        # y_df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)
 
         # evaluate the performance at the 25th, 50th and 75th event time quantile
-        times = np.quantile(df["duration"][df["event"] == 1.0], horizons).tolist()
+        # times = np.quantile(df["duration"][df["event"] == 1.0], horizons).tolist()
         # times = [2, 4, 6, 8, 10]
 
         df_feat = df.drop(["duration", "event"], axis=1)
@@ -56,8 +52,6 @@ def load_data(config, X, y_df, train_idx=None, val_idx=None):
         else:
             df_train = df_feat.iloc[train_idx]
             df_val = df_feat.iloc[val_idx]
-            # df_test = df_feat.drop(max_duration_idx).sample(frac=0.1)
-            # df_train = df_train.drop(df_test.index)
             df_test = pd.DataFrame()
         # assign cuts
         labtrans = LabelTransform(cuts=np.array([df["duration"].min()] + times + [df["duration"].max()]))

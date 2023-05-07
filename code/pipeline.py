@@ -32,7 +32,7 @@ set_config(display="text")  # displays text representation of estimators
 
 class IDPPPipeline:
     OUTPUT_DIR = "../out"
-    num_iter = 100
+    num_iter = 10
     train_size = 0.8
     n_estimators = 100
 
@@ -64,13 +64,14 @@ class IDPPPipeline:
         self.team_shortcut_t1 = "uwb_T1a_{}"
         self.team_shortcut_t2 = "uwb_T2a_{}"
 
-        self.project = f"IDPP-CLEF-{dataset_name[-1]}_ST_sweep"
+        self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
                        "num_iter": self.num_iter,
                        "train_size": self.train_size,
                        "seed": self.seed,
-                       "n_estimators": self.n_estimators}
+                       # "n_estimators": self.n_estimators
+                       }
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
 
@@ -92,7 +93,12 @@ class IDPPPipeline:
                 plot_coef_(best_estimator, self.X)
 
             self.predict(best_estimator, self.X, self.y_struct, save=False)
-            self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
+
+            if name != "SurvTRACE":
+                self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
+
+            # if name == "SurvTRACE_cumulative":
+            #     self.predict_cumulative(best_estimator, self.X_test, save=True)
 
             self.wandb_run.finish()
 
@@ -103,10 +109,13 @@ class IDPPPipeline:
         self.team_shortcut_t1 = self.team_shortcut_t1.format(best_est_name)
         self.team_shortcut_t2 = self.team_shortcut_t2.format(best_est_name)
 
-        predictions_train_df = self.predict(best_estimator, self.X, self.y_struct, save=False)
-        predictions_test_df = self.predict(best_estimator, self.X_test, save=True)
-        cumulative_predictions_train_df = self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
-        cumulative_predictions_test_df = self.predict_cumulative(best_estimator, self.X_test, save=True)
+        self.predict(best_estimator, self.X, self.y_struct, save=False)
+        self.predict(best_estimator, self.X_test, save=True)
+
+        if best_est_name != "SurvTRACE":
+            self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
+            self.predict_cumulative(best_estimator, self.X_test, save=True)
+
 
     def run_model(self, model, random_state):
         X, y_struct, y_df = self.X, self.y_struct, self.y
@@ -250,8 +259,8 @@ def main():
     ID_FEAT = "patient_id"
 
     pipeline = IDPPPipeline(DATASET_DIR, DATASET, ID_FEAT, DEFAULT_RANDOM_SEED)
-    # pipeline.run()
-    pipeline.param_sweep()
+    pipeline.run()
+    # pipeline.param_sweep()
 
 if __name__ == "__main__":
     main()

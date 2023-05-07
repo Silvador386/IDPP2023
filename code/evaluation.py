@@ -17,9 +17,9 @@ def evaluate_c(model, X, y=None):
         y_occ, y_time = [val[0] for val in y], [val[1] for val in y]
         c_score = concordance_index_censored(y_occ, y_time, prediction_scores)[0]
 
-        c_score_check = model.score(X, y)
-        if abs(c_score - c_score_check) > 1e5:
-            print("Warning: C-Score not same after resize!")
+        # c_score_check = model.score(X, y)
+        # if abs(c_score - c_score_check) > 1e5:
+        #     print("Warning: C-Score not same after resize!")
     else:
         c_score = None
     return c_score, prediction_scores
@@ -32,24 +32,27 @@ def wrap_c_scorer(estimator, X_test, y_test):
 def evaluate_cumulative(model, X, y=None, time_points=None, plot=False):
     if time_points is None:
         time_points = [2, 4, 6, 8, 10]
-    pred_surv = model.predict_cumulative_hazard_function(X)
 
-    predictions = []
-    for i, surv_func in enumerate(pred_surv):
-        predictions.append(surv_func(time_points))
+    if model.__class__.__name__ == "SurvTraceWrap":
+        predictions = model.predict_multiple(X)
+    else:
+        pred_surv = model.predict_cumulative_hazard_function(X)
+        predictions = []
+        for i, surv_func in enumerate(pred_surv):
+            predictions.append(surv_func(time_points))
 
+            if plot:
+                plt.step(time_points, surv_func(time_points), where="post",
+                         label="Sample %d" % (i + 1))
         if plot:
-            plt.step(time_points, surv_func(time_points), where="post",
-                     label="Sample %d" % (i + 1))
-    if plot:
-        plt.title(f"{model.__class__.__name__} Step functions")
-        plt.ylabel("est. cumulative probability of survival $\hat{S}(t)$")
-        plt.xlabel("time $t$")
-        plt.ylim([0, 1])
-        plt.legend(loc="best")
-        plt.show()
+            plt.title(f"{model.__class__.__name__} Step functions")
+            plt.ylabel("est. cumulative probability of survival $\hat{S}(t)$")
+            plt.xlabel("time $t$")
+            plt.ylim([0, 1])
+            plt.legend(loc="best")
+            plt.show()
 
-    predictions = np.array(predictions)
+        predictions = np.array(predictions)
     predictions = resize_pred_scores_by_order(predictions)
 
     if y is not None:

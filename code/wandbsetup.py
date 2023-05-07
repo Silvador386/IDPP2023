@@ -3,6 +3,7 @@ import wandb
 
 def setup_wandb(project, config, name=None, notes=None, *kwargs):
     wandb.login()
+    config["model"] = name
     run = wandb.init(
         project=project,
         config=config,
@@ -56,7 +57,7 @@ cgbs_sweep_params = {"loss": {"values": ['coxph', 'squared', 'ipcwls']},
                      "dropout_rate": {"values": [0.0, 0.2, 0.5]}
                      }
 
-surftrace_sweep_params = {'batch_size': {"min": 32, "max": 128},
+surftrace_sweep_params = {'batch_size': {"min": 48, "max": 128},
                           'weight_decay': {"min": 1e-5, "max": 1e-3},
                           'learning_rate': {"min": 1e-4, "max": 1e-2},
                           'epochs': {"values": [30]},
