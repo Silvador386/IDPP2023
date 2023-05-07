@@ -1,4 +1,6 @@
 import copy
+import numpy as np
+
 from sksurv.ensemble import RandomSurvivalForest, ComponentwiseGradientBoostingSurvivalAnalysis, \
     GradientBoostingSurvivalAnalysis
 from sksurv.metrics import concordance_index_censored
@@ -14,24 +16,24 @@ from survtrace.survtrace.config import STConfig
 
 
 def init_surv_estimators(seed, X, y_df, n_estimators=100):
-    rsf = RandomSurvivalForest(n_estimators=100, max_depth=6, min_samples_split=10, min_samples_leaf=3,
-                               n_jobs=6, random_state=seed)
+    rsf = RandomSurvivalForest(n_estimators=300, max_depth=10, min_samples_split=12, min_samples_leaf=2,
+                               oob_score=True, n_jobs=6, random_state=seed)
     gbs = GradientBoostingSurvivalAnalysis(n_estimators=500, learning_rate=0.5, max_depth=3, min_samples_split=4,
                                            min_samples_leaf=1, subsample=0.5, dropout_rate=0.25, random_state=seed)
     # msa = MinlipSurvivalAnalysis()
-    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.1, subsample=0.2, random_state=seed)
+    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.3, subsample=0.5, random_state=seed)
     cox = CoxPHSurvivalAnalysis()
     surv_trace = SurvTraceWrap(seed, X, y_df, cumulative=False)
     surv_trace_cumulative = SurvTraceWrap(seed, X, y_df, cumulative=True)
 
     estimators = {
-        # "RandomForest": rsf,
-        # "GradientBoost": gbs,
+        "RandomForest": rsf,
+        "GradientBoost": gbs,
         # "MinlipSA": msa,
-        # "CGBSA": cgb,
+        "CGBSA": cgb,
         # "Cox": cox
         "SurvTRACE": surv_trace,
-        "SurvTRACE_cumulative": surv_trace_cumulative,
+        # "SurvTRACE_cumulative": surv_trace_cumulative,
     }
 
     return estimators
@@ -50,7 +52,7 @@ class SurvTraceWrap:
         'batch_size': 64,
         'weight_decay': 0.0000284,
         'learning_rate': 0.006157,
-        'epochs': 30,
+        'epochs': 40,
     }
 
     def __init__(self, seed, X, y_df, wandb_run=None, cumulative=False, **params):
@@ -75,7 +77,7 @@ class SurvTraceWrap:
 
     def fit(self, X, y_df, train_idx, val_idx):
         self.model_count = SurvTraceWrap.model_counter
-        SurvTraceWrap.model_counter += 1
+        # SurvTraceWrap.model_counter += 1
         self.STConfig.update(checkpoint=f"./survtrace/checkpoints/iddp_{self.model_count:03d}.pt"),
         hparams = self.hparams
         df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(self.STConfig, X, y_df, train_idx,
@@ -109,10 +111,12 @@ class SurvTraceWrap:
         predictions = predictions.cpu().numpy()
         return predictions[:, -1]
 
-    def predict_multiple(self, X):
+    def predict_cumulative(self, X):
         predictions = self.model.predict(X, batch_size=self.hparams["batch_size"])
         predictions = predictions.cpu().numpy()
-        return predictions[:, :-1]
+        # for i in range(predictions.shape[1]):
+        #     predictions[:, i+1:] += predictions[:, i].reshape(-1, 1)
+        return -predictions[:, :-1]
 
 
 def run_survtrace(seed, X, y_df, train_idx=None, test_idx=None):

@@ -32,7 +32,7 @@ set_config(display="text")  # displays text representation of estimators
 
 class IDPPPipeline:
     OUTPUT_DIR = "../out"
-    num_iter = 10
+    num_iter = 100
     train_size = 0.8
     n_estimators = 100
 
@@ -155,15 +155,15 @@ class IDPPPipeline:
 
                 except AssertionError:
                     print("Error")
-            if i % 5 == 0 or (i+1) == num_iter:
-                self.wandb_run.log({f"Num Iter": i+1,
-                                    f"Train C-Score Average": np.average(train_c_scores),
-                                    f"Val C-Score Average": np.average(val_c_scores),
-                                    f"Train C-Score": train_c_score[0],
-                                    f"Val C-Score": val_c_score[0],
-                                    f"Train C-Std": np.std(train_c_scores),
-                                    f"Val C-Std": np.std(val_c_scores)
-                                    })
+            # if i % 5 == 0 or (i+1) == num_iter:
+            self.wandb_run.log({f"Num Iter": i+1,
+                                f"Train C-Score Average": np.average(train_c_scores),
+                                f"Val C-Score Average": np.average(val_c_scores),
+                                f"Train C-Score": train_c_score[0],
+                                f"Val C-Score": val_c_score[0],
+                                f"Train C-Std": np.std(train_c_scores),
+                                f"Val C-Std": np.std(val_c_scores)
+                                })
 
         best_acc, best_estimator = (np.max(np.array(val_c_scores)), fitted_models[np.array(val_c_scores).argmax()])
         return np.array(train_c_scores), np.array(val_c_scores), best_acc, best_estimator
@@ -245,7 +245,7 @@ class IDPPPipeline:
 
 
 def main():
-    DEFAULT_RANDOM_SEED = 2021  # random.randint(0, 2**10)
+    DEFAULT_RANDOM_SEED = 2021  # 2021  # random.randint(0, 2**10)
 
     def seed_basic(seed=DEFAULT_RANDOM_SEED):
         random.seed(seed)

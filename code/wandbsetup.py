@@ -58,15 +58,15 @@ cgbs_sweep_params = {"loss": {"values": ['coxph', 'squared', 'ipcwls']},
                      }
 
 surftrace_sweep_params = {'batch_size': {"min": 48, "max": 128},
-                          'weight_decay': {"min": 1e-5, "max": 1e-3},
-                          'learning_rate': {"min": 1e-4, "max": 1e-2},
-                          'epochs': {"values": [30]},
-                          'hidden_size': {"values": [16, 32, 64, 128]}, # embedding size
-                          'intermediate_size': {"values": [32, 64, 128, 256]}, # intermediate layer size in transformer layer
-                          'num_hidden_layers': {"values": [2, 3, 4, 5]}, # num of transformers
-                          'num_attention_heads': {"values": [2, 4, ]}, # num of attention heads in transformer layer
-                          'hidden_dropout_prob': {"min": 0.0, "max": 0.6},
-                          'attention_probs_dropout_prob': {"min": 0.0, "max": 0.6},
+                          'weight_decay': {"min": 5e-5, "max": 1e-3},
+                          'learning_rate': {"min": 5e-4, "max": 1e-2},
+                          'epochs': {"values": [40]},
+                          'hidden_size': {"values": [16, 32, 64]}, # embedding size
+                          'intermediate_size': {"values": [ 64, 128, 256, 512]}, # intermediate layer size in transformer layer
+                          'num_hidden_layers': {"values": [2, 4, 6]}, # num of transformers
+                          'num_attention_heads': {"values": [2, 4, 6]}, # num of attention heads in transformer layer
+                          'hidden_dropout_prob': {"min": 0.2, "max": 0.4},
+                          'attention_probs_dropout_prob': {"min": 0.1, "max": 0.3},
                           }
 
 def launch_sweep(project, notes, config):
