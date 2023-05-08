@@ -32,7 +32,7 @@ set_config(display="text")  # displays text representation of estimators
 
 class IDPPPipeline:
     OUTPUT_DIR = "../out"
-    num_iter = 100
+    num_iter = 1
     train_size = 0.8
     n_estimators = 100
 
@@ -104,7 +104,7 @@ class IDPPPipeline:
         best_estimator = best_est[best_estimator_index]
         best_est_name = list(self.estimators.keys())[best_estimator_index]
 
-        best_est_name = "survGB"
+        best_est_name = "SurvTRACE"
 
         self.team_shortcut_t1 = self.team_shortcut_t1.format(best_est_name)
         self.team_shortcut_t2 = self.team_shortcut_t2.format(best_est_name)
@@ -116,12 +116,12 @@ class IDPPPipeline:
             self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
             self.predict_cumulative(best_estimator, self.X_test, save=True)
 
-        # ensemble = AvgEnsemble(best_est)
-        # self.run_model(ensemble, self.seed)
-        # self.predict(ensemble, self.X, self.y_struct, save=False)
-        # self.predict(ensemble, self.X_test, save=True)
-        # self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
-        # self.predict_cumulative(ensemble, self.X_test, save=True)
+        ensemble = AvgEnsemble(best_est)
+        self.run_model(ensemble, self.seed)
+        self.predict(ensemble, self.X, self.y_struct, save=False)
+        self.predict(ensemble, self.X_test, save=True)
+        self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
+        self.predict_cumulative(ensemble, self.X_test, save=True)
 
     def run_model(self, model, random_state):
         X, y_struct, y_df = self.X, self.y_struct, self.y
@@ -136,6 +136,7 @@ class IDPPPipeline:
                                                  X.iloc[test_idx], y_struct[test_idx]
 
             if model.__class__.__name__ == "SurvTraceWrap":
+                model = SurvTraceWrap(self.seed, X, y_df)
                 model, train_c_score, test_c_score = model.fit(X, y_df, train_idx, test_idx)
             else:
                 model.fit(X_train, y_train)

@@ -28,11 +28,11 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
 
     estimators = {
         # "RandomForest": rsf,
-        "GradientBoost": gbs,
+        # "GradientBoost": gbs,
         # "MinlipSA": msa,
         # "CGBSA": cgb,
         # "Cox": cox
-        # "SurvTRACE": surv_trace,
+        "SurvTRACE": surv_trace,
         # "SurvTRACE_cumulative": surv_trace_cumulative,
     }
 
@@ -75,7 +75,10 @@ class SurvTraceWrap:
 
     def __init__(self, seed, X, y_df, wandb_run=None, cumulative=False, **params):
         self.seed = seed
+        self.model_count = SurvTraceWrap.model_counter
+        SurvTraceWrap.model_counter += 1
         self.STConfig = copy.deepcopy(STConfig)
+        self.STConfig.update(checkpoint=f"./survtrace/checkpoints/iddp_{self.model_count:03d}.pt"),
         self.STConfig['data'] = 'idpp'
         self.STConfig['seed'] = self.seed
         if cumulative:
@@ -94,9 +97,6 @@ class SurvTraceWrap:
         df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(self.STConfig, X, y_df)
 
     def fit(self, X, y_df, train_idx, val_idx):
-        self.model_count = SurvTraceWrap.model_counter
-        # SurvTraceWrap.model_counter += 1
-        self.STConfig.update(checkpoint=f"./survtrace/checkpoints/iddp_{self.model_count:03d}.pt"),
         hparams = self.hparams
         df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(self.STConfig, X, y_df, train_idx,
                                                                                    val_idx)
