@@ -16,19 +16,19 @@ from survtrace.survtrace.config import STConfig
 
 
 def init_surv_estimators(seed, X, y_df, n_estimators=100):
-    rsf = RandomSurvivalForest(n_estimators=300, max_depth=5, min_samples_split=10, min_samples_leaf=2,
+    rsf = RandomSurvivalForest(n_estimators=300, max_depth=6, min_samples_split=10, min_samples_leaf=3,
                                oob_score=True, n_jobs=6, random_state=seed)
     gbs = GradientBoostingSurvivalAnalysis(n_estimators=500, learning_rate=0.5, max_depth=3, min_samples_split=4,
                                            min_samples_leaf=1, subsample=0.5, dropout_rate=0.2, random_state=seed)
     # msa = MinlipSurvivalAnalysis()
-    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.1, subsample=0.2, random_state=seed)
+    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.1, dropout_rate=0.0, subsample=0.2, random_state=seed)
     cox = CoxPHSurvivalAnalysis()
     surv_trace = SurvTraceWrap(seed, X, y_df, cumulative=False)
     surv_trace_cumulative = SurvTraceWrap(seed, X, y_df, cumulative=True)
 
     estimators = {
-        "RandomForest": rsf,
-        # "GradientBoost": gbs,
+        # "RandomForest": rsf,
+        "GradientBoost": gbs,
         # "MinlipSA": msa,
         # "CGBSA": cgb,
         # "Cox": cox
