@@ -3,7 +3,7 @@ import numpy as np
 from fastai.tabular.all import RandomSplitter, range_of, TabularPandas, \
     Categorify, FillMissing, Normalize, CategoryBlock
 
-from time_window_functions import count_not_nan, mode_wrapper
+from time_window_functions import count_not_nan, mode_wrapper, select_max_mri
 
 ALL_FEATURES = ['patient_id', 'sex', 'residence_classification', 'ethnicity',
                 'ms_in_pediatric_age', 'age_at_onset', 'diagnostic_delay',
@@ -61,8 +61,8 @@ def preprocess(merged_df):
                           'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom', 'supratentorial_symptom',
                           "other_symptoms"
                           ]
-    for feature_cols in features_to_encode:
-        merged_df = df_one_hot_encode(merged_df, feature_cols, drop_org=True)
+    for feature_col in features_to_encode:
+        merged_df = df_one_hot_encode(merged_df, feature_col, drop_org=True)
 
     # ts_features = ["age_at_onset", "edss_as_evaluated_by_clinician", "delta_edss_time0", "potential_value",
     #                "delta_evoked_potential_time0", "delta_relapse_time0"]
@@ -105,7 +105,7 @@ def preprocess(merged_df):
     features_to_leave = [*features_to_encode,  *target_features,
                          "patient_id", "edss_as_evaluated_by_clinician", "delta_edss_time0",
                          "delta_relapse_time0",
-                         "time_since_onset", "diagnostic_delay",
+                         # "time_since_onset", "diagnostic_delay",
                          'altered_potential',  # TODO doesnt work with transformer
                          'potential_value', 'location', 'delta_evoked_potential_time0',
                          # 'multiple_sclerosis_type', #'delta_observation_time0',  # Might worsen the score
@@ -245,7 +245,7 @@ def select_same_feature_col_names_specific(df, feature) -> list:
 
 
 def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
-    dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int8)
+    dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int32)
     res = pd.concat([original_dataframe, dummies], axis=1)
     if drop_org:
         res = res.drop(feature_to_encode, axis=1)
@@ -308,10 +308,10 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
         #     potential_value_masked = np.where(mask, potential_value, np.nan)
 
         calculated_values = np.apply_along_axis(np.nansum, 1, potential_value)
-        new_feature_name = f"altered_potential_({start_time}_{end_time})_sum"
+        new_feature_name = f"altered_potential_({start_time}_{end_time})_Psum"
         output_data[new_feature_name] = calculated_values
         calculated_values = np.apply_along_axis(count_not_nan, 1, potential_value)
-        new_feature_name = f"altered_potential_({start_time}_{end_time})_nan"
+        new_feature_name = f"altered_potential_({start_time}_{end_time})_NNaNsum"
         output_data[new_feature_name] = calculated_values
 
     new_df = pd.DataFrame(output_data)
@@ -366,22 +366,38 @@ def preprocess_mri(df, feature_names, time_feature, time_windows, functions, dro
 
         mri_area = selected_data["mri_area_label"]
 
+        vals = {"0": 1, "1-2": 2, ">=3": 3, ">=9": 4, "nan": 0}
+        total_num_cat = selected_data["number_of_total_lesions_T2"].astype(str)
+        u, inv = np.unique(total_num_cat, return_inverse=True)
+        total_num_cat = np.array([vals[x] for x in u])[inv].reshape(total_num_cat.shape)
+
+        calculated_values = np.apply_along_axis(np.nanmax, 1, total_num_cat)
+        new_feature_name = f"mri_({start_time}_{end_time})_totalT2"
+        output_data[new_feature_name] = calculated_values
+
         lesions_T1 = selected_data["lesions_T1"]
         num_gan_T1 = selected_data["number_of_lesions_T1_gadolinium"]
 
         lesions_T2 = selected_data["lesions_T2"]
         num_new_T2 = selected_data["number_of_new_or_enlarged_lesions_T2"]
 
-        # mri-label: ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]
-        for mri_label in ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]:
-            mask = (mri_area == mri_label)
+        # calculated_values = np.apply_along_axis(np.nansum, 1, num_gan_T1)
+        # new_feature_name = f"mri_T1_gadolinium_({start_time}_{end_time})_sum"
+        # output_data[new_feature_name] = calculated_values
+        # calculated_values = np.apply_along_axis(count_not_nan, 1, num_gan_T1)
+        # new_feature_name = f"mri_T1_gadolinium_({start_time}_{end_time})_nan"
+        # output_data[new_feature_name] = calculated_values
 
-            for region in ["number_of_lesions_T1_gadolinium", "number_of_new_or_enlarged_lesions_T2"]:
-                region_data = selected_data[region]
-                region_masked = np.where(mask, region_data, np.nan)
-                calculated_values = np.apply_along_axis(np.nansum, 1, region_masked)
-                new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}"
-                output_data[new_feature_name] = calculated_values
+        # mri-label: ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]
+        # for mri_label in ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]:
+        #     mask = (mri_area == mri_label)
+        #
+        #     for region in ["number_of_lesions_T1_gadolinium", "number_of_new_or_enlarged_lesions_T2"]:
+        #         region_data = selected_data[region]
+        #         region_masked = np.where(mask, region_data, np.nan)
+        #         calculated_values = np.apply_along_axis(np.nansum, 1, region_masked)
+        #         new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}"
+        #         output_data[new_feature_name] = calculated_values
 
             # for f_name, func in functions.items():
             #     calculated_values = np.apply_along_axis(func, 1, calculated_values)
@@ -398,7 +414,7 @@ def preprocess_mri(df, feature_names, time_feature, time_windows, functions, dro
             #     output_data[new_feature_name] = calculated_values
 
 
-    new_df = pd.DataFrame(output_data)
+    new_df = pd.DataFrame(output_data).fillna(0)
     output_df = pd.concat([df, new_df], axis=1)
 
     if drop_original:

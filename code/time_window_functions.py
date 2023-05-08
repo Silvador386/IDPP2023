@@ -12,3 +12,10 @@ def mode_wrapper(array):
         return np.nan
     else:
         return mode(array, keepdims=False, nan_policy="omit").mode
+
+
+def select_max_mri(array):
+    for cat_type in category_list:
+        if cat_type in array:
+            return np.array(cat_type).astype(str)
+    return np.nan

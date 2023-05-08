@@ -16,23 +16,23 @@ from survtrace.survtrace.config import STConfig
 
 
 def init_surv_estimators(seed, X, y_df, n_estimators=100):
-    rsf = RandomSurvivalForest(n_estimators=300, max_depth=10, min_samples_split=12, min_samples_leaf=2,
+    rsf = RandomSurvivalForest(n_estimators=300, max_depth=5, min_samples_split=10, min_samples_leaf=2,
                                oob_score=True, n_jobs=6, random_state=seed)
     gbs = GradientBoostingSurvivalAnalysis(n_estimators=500, learning_rate=0.5, max_depth=3, min_samples_split=4,
-                                           min_samples_leaf=1, subsample=0.5, dropout_rate=0.25, random_state=seed)
+                                           min_samples_leaf=1, subsample=0.5, dropout_rate=0.2, random_state=seed)
     # msa = MinlipSurvivalAnalysis()
-    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.3, subsample=0.5, random_state=seed)
+    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.1, subsample=0.2, random_state=seed)
     cox = CoxPHSurvivalAnalysis()
     surv_trace = SurvTraceWrap(seed, X, y_df, cumulative=False)
     surv_trace_cumulative = SurvTraceWrap(seed, X, y_df, cumulative=True)
 
     estimators = {
         "RandomForest": rsf,
-        "GradientBoost": gbs,
+        # "GradientBoost": gbs,
         # "MinlipSA": msa,
-        "CGBSA": cgb,
+        # "CGBSA": cgb,
         # "Cox": cox
-        "SurvTRACE": surv_trace,
+        # "SurvTRACE": surv_trace,
         # "SurvTRACE_cumulative": surv_trace_cumulative,
     }
 
@@ -45,6 +45,24 @@ def init_model(seed, **params):
     cgb = ComponentwiseGradientBoostingSurvivalAnalysis(random_state=seed, **params)
     return cgb
 
+
+class AvgEnsemble:
+    def __init__(self, estimators):
+        self.estimators = estimators
+        self.num_est = len(estimators)
+
+    def predict(self, X):
+        predictions = np.array([estimator.predict(X).reshape(-1) for estimator in self.estimators]).T
+        predictions = (predictions - np.average(predictions, axis=0)) / np.std(predictions, axis=0)
+        return np.average(predictions, axis=1)
+
+    # def predict_cumulative(self, X):
+    #     predictions = np.array([estimator.predict(X) for estimator in self.estimators if
+    #                             estimator.__class__.__name__ != "SurvTraceWrap"])
+    #     return np.average(predictions, axis=2)
+
+    def fit(self, X, y_df):
+        pass
 
 class SurvTraceWrap:
     model_counter = 0

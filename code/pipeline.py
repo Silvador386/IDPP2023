@@ -12,7 +12,7 @@ from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_sp
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
-from survEstimators import init_surv_estimators, init_model, run_survtrace, SurvTraceWrap
+from survEstimators import init_surv_estimators, init_model, run_survtrace, SurvTraceWrap, AvgEnsemble
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
 from wandbsetup import setup_wandb, launch_sweep
@@ -42,7 +42,7 @@ class IDPPPipeline:
         self.id_feature = id_feature
         self.seed = seed
 
-        dataset_dirs = ["../data/datasetA_train", "../data/datasetA_test"]
+        dataset_dirs = [f"../data/{dataset_name}_train", f"../data/{dataset_name}_test"]
 
         multiple_merge_dfs = []
         for data_dir, dataset_type in zip(dataset_dirs, ["train", "test"]):
@@ -64,7 +64,7 @@ class IDPPPipeline:
         self.team_shortcut_t1 = "uwb_T1a_{}"
         self.team_shortcut_t2 = "uwb_T2a_{}"
 
-        self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
+        self.project = f"IDPP-CLEF-{dataset_name[-1]}"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
                        "num_iter": self.num_iter,
@@ -74,8 +74,6 @@ class IDPPPipeline:
                        }
 
         self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
-
-        # run_survtrace(seed, self.X, self.y)
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -116,6 +114,12 @@ class IDPPPipeline:
             self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
             self.predict_cumulative(best_estimator, self.X_test, save=True)
 
+        ensemble = AvgEnsemble(best_est)
+        self.run_model(ensemble, self.seed)
+        self.predict(ensemble, self.X, self.y_struct, save=False)
+        self.predict(ensemble, self.X_test, save=True)
+        # self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
+        # self.predict_cumulative(ensemble, self.X_test, save=True)
 
     def run_model(self, model, random_state):
         X, y_struct, y_df = self.X, self.y_struct, self.y
@@ -215,7 +219,6 @@ class IDPPPipeline:
                        f"Val C-Score": val_c_score[0],
                        })
 
-
     def run_ensemble(self):
         from sksurv.meta import EnsembleSelection, EnsembleSelectionRegressor, Stacking
 
@@ -254,7 +257,7 @@ def main():
 
     seed_basic(DEFAULT_RANDOM_SEED)
 
-    DATASET = "datasetA"
+    DATASET = "datasetB"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 
