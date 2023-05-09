@@ -33,7 +33,7 @@ def evaluate_cumulative(model, X, y=None, time_points=None, plot=False):
     if time_points is None:
         time_points = [2, 4, 6, 8, 10]
 
-    if model.__class__.__name__ == "SurvTraceWrap":
+    if model.__class__.__name__ in ["SurvTraceWrap", "AvgEnsemble"]:
         predictions = model.predict_cumulative(X)
     else:
         pred_surv = model.predict_cumulative_hazard_function(X)

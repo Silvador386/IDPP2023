@@ -20,17 +20,20 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
                                oob_score=True, n_jobs=6, random_state=seed)
     gbs = GradientBoostingSurvivalAnalysis(n_estimators=500, learning_rate=0.5, max_depth=3, min_samples_split=4,
                                            min_samples_leaf=1, subsample=0.5, dropout_rate=0.2, random_state=seed)
+    # gbs = GradientBoostingSurvivalAnalysis(random_state=seed)
     # msa = MinlipSurvivalAnalysis()
-    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.1, dropout_rate=0.0, subsample=0.2, random_state=seed)
+    cgb = ComponentwiseGradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.5, dropout_rate=0.2, subsample=0.75, random_state=seed)
+    # cgb = ComponentwiseGradientBoostingSurvivalAnalysis(random_state=seed)
+
     cox = CoxPHSurvivalAnalysis()
     surv_trace = SurvTraceWrap(seed, X, y_df, cumulative=False)
     surv_trace_cumulative = SurvTraceWrap(seed, X, y_df, cumulative=True)
 
     estimators = {
-        # "RandomForest": rsf,
-        # "GradientBoost": gbs,
+        "RandomForest": rsf,
+        "GradientBoost": gbs,
         # "MinlipSA": msa,
-        # "CGBSA": cgb,
+        "CGBSA": cgb,
         # "Cox": cox
         "SurvTRACE": surv_trace,
         # "SurvTRACE_cumulative": surv_trace_cumulative,
@@ -50,19 +53,37 @@ class AvgEnsemble:
     def __init__(self, estimators):
         self.estimators = estimators
         self.num_est = len(estimators)
+        self.averaging_coeffs = [0.25, 0.5, 0.25]
 
     def predict(self, X):
         predictions = np.array([estimator.predict(X).reshape(-1) for estimator in self.estimators]).T
         predictions = (predictions - np.average(predictions, axis=0)) / np.std(predictions, axis=0)
-        return np.average(predictions, axis=1)
+        averaging = np.average(predictions, axis=1)
+        # averaging = sum([coef*predictions[:, i] for i, coef in enumerate(self.averaging_coeffs)]) # max
+        maxing = np.max(predictions, axis=1)
+        return maxing
 
-    # def predict_cumulative(self, X):
-    #     predictions = np.array([estimator.predict(X) for estimator in self.estimators if
-    #                             estimator.__class__.__name__ != "SurvTraceWrap"])
-    #     return np.average(predictions, axis=2)
+    def predict_cumulative(self, X):
+        time_points = [2, 4, 6, 8, 10]
+        model_predictions = []
+        for model in self.estimators:
+            pred_surv = model.predict_cumulative_hazard_function(X)
+            predictions = []
+            for i, surv_func in enumerate(pred_surv):
+                predictions.append(surv_func(time_points))
+
+            predictions = (np.array(predictions) - np.average(predictions, axis=1).reshape(-1, 1))/np.std(predictions, axis=1).reshape(-1, 1)
+            model_predictions.append(predictions)
+
+        model_predictions = np.array(model_predictions)
+        averaging = np.average(model_predictions, axis=0)
+        maxing = np.max(model_predictions, axis=0)
+        # averaging = [coef * model_predictions[i] for i, coef in enumerate(self.averaging_coeffs)]
+        return averaging
 
     def fit(self, X, y_df):
         pass
+
 
 class SurvTraceWrap:
     model_counter = 0
@@ -132,43 +153,46 @@ class SurvTraceWrap:
     def predict_cumulative(self, X):
         predictions = self.model.predict(X, batch_size=self.hparams["batch_size"])
         predictions = predictions.cpu().numpy()
-        # for i in range(predictions.shape[1]):
-        #     predictions[:, i+1:] += predictions[:, i].reshape(-1, 1)
-        return -predictions[:, :-1]
+        # predictions += np.min(predictions)
+        cumulative_preds = np.zeros(predictions.shape)
+        # cumulative_preds[:, 0] = predictions[:, 0]
+        for i in range(predictions.shape[1]):
+            cumulative_preds[:, i:] += predictions[:, i].reshape(-1, 1)
+        return predictions[:, :-1]
 
 
-def run_survtrace(seed, X, y_df, train_idx=None, test_idx=None):
-    STConfig['data'] = 'idpp'
-    STConfig['seed'] = seed
-
-    hparams = {
-        'batch_size': 64,
-        'weight_decay': 0.0009008,
-        'learning_rate': 0.001429,
-        'epochs': 40,
-    }
-
-    # load data
-    df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df, train_idx, test_idx)
-
-    # get model
-    model = SurvTraceSingle(STConfig)
-
-    # initialize a trainer
-    trainer = Trainer(model)
-    train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
-                                       batch_size=hparams['batch_size'],
-                                       epochs=hparams['epochs'],
-                                       learning_rate=hparams['learning_rate'],
-                                       weight_decay=hparams['weight_decay'], )
-
-    evaluator = Evaluator(df, df_train.index)
-    evaluator.eval(model, (df_test, df_y_test))
-    print("done")
-
-    scores = []
-    for X_pred, y_pred in zip([df_train, df_val], [df_y_train, df_y_val]):
-        preds = model.predict(X_pred, batch_size=64)
-        scores.append(concordance_index_censored(y_pred["event"].astype(bool), y_pred["duration"], preds[:, -1]))
-
-    return model, scores[0], scores[1]
+# def run_survtrace(seed, X, y_df, train_idx=None, test_idx=None):
+#     STConfig['data'] = 'idpp'
+#     STConfig['seed'] = seed
+#
+#     hparams = {
+#         'batch_size': 64,
+#         'weight_decay': 0.0009008,
+#         'learning_rate': 0.001429,
+#         'epochs': 40,
+#     }
+#
+#     # load data
+#     df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val = load_data(STConfig, X, y_df, train_idx, test_idx)
+#
+#     # get model
+#     model = SurvTraceSingle(STConfig)
+#
+#     # initialize a trainer
+#     trainer = Trainer(model)
+#     train_loss, val_loss = trainer.fit((df_train, df_y_train), (df_val, df_y_val),
+#                                        batch_size=hparams['batch_size'],
+#                                        epochs=hparams['epochs'],
+#                                        learning_rate=hparams['learning_rate'],
+#                                        weight_decay=hparams['weight_decay'], )
+#
+#     evaluator = Evaluator(df, df_train.index)
+#     evaluator.eval(model, (df_test, df_y_test))
+#     print("done")
+#
+#     scores = []
+#     for X_pred, y_pred in zip([df_train, df_val], [df_y_train, df_y_val]):
+#         preds = model.predict(X_pred, batch_size=64)
+#         scores.append(concordance_index_censored(y_pred["event"].astype(bool), y_pred["duration"], preds[:, -1]))
+#
+#     return model, scores[0], scores[1]

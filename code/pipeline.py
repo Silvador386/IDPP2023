@@ -12,7 +12,7 @@ from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_sp
 from classification import init_classifiers, fit_models
 from regressors import init_regressors
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
-from survEstimators import init_surv_estimators, init_model, run_survtrace, SurvTraceWrap, AvgEnsemble
+from survEstimators import init_surv_estimators, init_model, SurvTraceWrap, AvgEnsemble
 from sklearn.model_selection import StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
 from wandbsetup import setup_wandb, launch_sweep
@@ -32,7 +32,7 @@ set_config(display="text")  # displays text representation of estimators
 
 class IDPPPipeline:
     OUTPUT_DIR = "../out"
-    num_iter = 1
+    num_iter = 100
     train_size = 0.8
     n_estimators = 100
 
@@ -61,10 +61,10 @@ class IDPPPipeline:
 
         self.estimators = init_surv_estimators(self.seed, self.X, self.y, self.n_estimators)
 
-        self.team_shortcut_t1 = "uwb_T1a_{}"
-        self.team_shortcut_t2 = "uwb_T2a_{}"
+        self.team_shortcut_t1 = "uwb_T1{}_{}"
+        self.team_shortcut_t2 = "uwb_T2{}_{}"
 
-        self.project = f"IDPP-CLEF-{dataset_name[-1]}_V3"
+        self.project = f"IDPP-CLEF-{dataset_name[-1]}{'_V3' if self.dataset_name == 'datasetA' else ''}"
         self.config = {"column_names": list(self.X.columns.values),
                        "X_shape": self.X.shape,
                        "num_iter": self.num_iter,
@@ -73,7 +73,7 @@ class IDPPPipeline:
                        # "n_estimators": self.n_estimators
                        }
 
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])"
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avgMax"
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -104,24 +104,26 @@ class IDPPPipeline:
         best_estimator = best_est[best_estimator_index]
         best_est_name = list(self.estimators.keys())[best_estimator_index]
 
-        best_est_name = "SurvTRACE"
+        best_est_name = "AvgEnsembleMax"
 
-        self.team_shortcut_t1 = self.team_shortcut_t1.format(best_est_name)
-        self.team_shortcut_t2 = self.team_shortcut_t2.format(best_est_name)
+        self.team_shortcut_t1 = self.team_shortcut_t1.format(self.dataset_name[-1].lower(), best_est_name)
+        self.team_shortcut_t2 = self.team_shortcut_t2.format(self.dataset_name[-1].lower(), best_est_name)
 
         self.predict(best_estimator, self.X, self.y_struct, save=False)
         self.predict(best_estimator, self.X_test, save=True)
 
-        if best_est_name != "SurvTRACE":
-            self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
-            self.predict_cumulative(best_estimator, self.X_test, save=True)
+        # if best_est_name != "SurvTRACE":
+        #     self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
+        #     self.predict_cumulative(best_estimator, self.X_test, save=True)
 
         ensemble = AvgEnsemble(best_est)
-        self.run_model(ensemble, self.seed)
+        self.wandb_run = setup_wandb(project=self.project, config=self.config, name="EnsembleAvg", notes=self.notes)
+        self.run_n_times(ensemble, 100)
         self.predict(ensemble, self.X, self.y_struct, save=False)
         self.predict(ensemble, self.X_test, save=True)
-        self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
-        self.predict_cumulative(ensemble, self.X_test, save=True)
+        # self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
+        # self.predict_cumulative(ensemble, self.X_test, save=True)
+        self.wandb_run.finish()
 
     def run_model(self, model, random_state):
         X, y_struct, y_df = self.X, self.y_struct, self.y
