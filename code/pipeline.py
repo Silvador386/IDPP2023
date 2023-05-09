@@ -33,7 +33,7 @@ set_config(display="text")  # displays text representation of estimators
 class IDPPPipeline:
     OUTPUT_DIR = "../out"
     num_iter = 100
-    train_size = 0.8
+    train_size = 0.95
     n_estimators = 100
 
     def __init__(self, dataset_dir, dataset_name, id_feature, seed):
@@ -76,7 +76,7 @@ class IDPPPipeline:
                        # "n_estimators": self.n_estimators
                        }
 
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avg_cummulative"
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avg_minval_gb300"
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -107,7 +107,7 @@ class IDPPPipeline:
         best_estimator = best_est[best_estimator_index]
         best_est_name = list(self.estimators.keys())[best_estimator_index]
 
-        best_est_name = "AvgEnsembleC"
+        best_est_name = "AvgEnsemble_minVal"
 
         self.team_shortcut_t1 = self.team_shortcut_t1.format(self.dataset_name[-1].lower(), best_est_name)
         self.team_shortcut_t2 = self.team_shortcut_t2.format(self.dataset_name[-1].lower(), best_est_name)
@@ -122,10 +122,10 @@ class IDPPPipeline:
         ensemble = AvgEnsemble(best_est)
         self.wandb_run = setup_wandb(project=self.project, config=self.config, name="EnsembleAvg", notes=self.notes)
         self.run_n_times(ensemble, 100)
-        # self.predict(ensemble, self.X, self.y_struct, save=False)
-        # self.predict(ensemble, self.X_test, save=True)
-        self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
-        self.predict_cumulative(ensemble, self.X_test, save=True)
+        self.predict(ensemble, self.X, self.y_struct, save=False)
+        self.predict(ensemble, self.X_test, save=True)
+        # self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
+        # self.predict_cumulative(ensemble, self.X_test, save=True)
         self.wandb_run.finish()
 
     def run_model(self, model, random_state):
@@ -165,7 +165,7 @@ class IDPPPipeline:
                     fitted_models += fitted_model
                     error_flag = False
 
-                except AssertionError:
+                except ValueError:
                     print("Error")
             # if i % 5 == 0 or (i+1) == num_iter:
             self.wandb_run.log({f"Num Iter": i+1,
@@ -265,7 +265,7 @@ def main():
 
     seed_basic(DEFAULT_RANDOM_SEED)
 
-    DATASET = "datasetA"
+    DATASET = "datasetB"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 
