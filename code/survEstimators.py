@@ -35,7 +35,7 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
         # "MinlipSA": msa,
         "CGBSA": cgb,
         # "Cox": cox
-        "SurvTRACE": surv_trace,
+        # "SurvTRACE": surv_trace,
         # "SurvTRACE_cumulative": surv_trace_cumulative,
     }
 
@@ -61,7 +61,7 @@ class AvgEnsemble:
         averaging = np.average(predictions, axis=1)
         # averaging = sum([coef*predictions[:, i] for i, coef in enumerate(self.averaging_coeffs)]) # max
         maxing = np.max(predictions, axis=1)
-        return maxing
+        return averaging
 
     def predict_cumulative(self, X):
         time_points = [2, 4, 6, 8, 10]

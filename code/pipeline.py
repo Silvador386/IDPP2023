@@ -42,10 +42,13 @@ class IDPPPipeline:
         self.id_feature = id_feature
         self.seed = seed
 
+
         dataset_dirs = [f"../data/{dataset_name}_train", f"../data/{dataset_name}_test"]
+        # dataset_dirs = [f"../data/datasetA_train", f"../data/datasetA_train_test",
+        #                 f"../data/datasetB_train", f"../data/datasetB_train_test"]
 
         multiple_merge_dfs = []
-        for data_dir, dataset_type in zip(dataset_dirs, ["train", "test"]):
+        for data_dir, dataset_type in zip(dataset_dirs, ["train", "test", ]):
             dfs = read_dfs(data_dir)
             multiple_merge_dfs.append(merge_dfs(dfs, self.dataset_name, self.id_feature, dataset_type))
 
@@ -73,7 +76,7 @@ class IDPPPipeline:
                        # "n_estimators": self.n_estimators
                        }
 
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avgMax"
+        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avg_cummulative"
 
     def run(self):
         best_accs, avg_acc, best_est = [], [], []
@@ -104,13 +107,13 @@ class IDPPPipeline:
         best_estimator = best_est[best_estimator_index]
         best_est_name = list(self.estimators.keys())[best_estimator_index]
 
-        best_est_name = "AvgEnsembleMax"
+        best_est_name = "AvgEnsembleC"
 
         self.team_shortcut_t1 = self.team_shortcut_t1.format(self.dataset_name[-1].lower(), best_est_name)
         self.team_shortcut_t2 = self.team_shortcut_t2.format(self.dataset_name[-1].lower(), best_est_name)
 
         self.predict(best_estimator, self.X, self.y_struct, save=False)
-        self.predict(best_estimator, self.X_test, save=True)
+        # self.predict(best_estimator, self.X_test, save=True)
 
         # if best_est_name != "SurvTRACE":
         #     self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
@@ -119,10 +122,10 @@ class IDPPPipeline:
         ensemble = AvgEnsemble(best_est)
         self.wandb_run = setup_wandb(project=self.project, config=self.config, name="EnsembleAvg", notes=self.notes)
         self.run_n_times(ensemble, 100)
-        self.predict(ensemble, self.X, self.y_struct, save=False)
-        self.predict(ensemble, self.X_test, save=True)
-        # self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
-        # self.predict_cumulative(ensemble, self.X_test, save=True)
+        # self.predict(ensemble, self.X, self.y_struct, save=False)
+        # self.predict(ensemble, self.X_test, save=True)
+        self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
+        self.predict_cumulative(ensemble, self.X_test, save=True)
         self.wandb_run.finish()
 
     def run_model(self, model, random_state):
