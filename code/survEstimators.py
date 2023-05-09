@@ -18,7 +18,7 @@ from survtrace.survtrace.config import STConfig
 def init_surv_estimators(seed, X, y_df, n_estimators=100):
     rsf = RandomSurvivalForest(n_estimators=300, max_depth=6, min_samples_split=10, min_samples_leaf=3,
                                oob_score=True, n_jobs=6, random_state=seed)
-    gbs = GradientBoostingSurvivalAnalysis(n_estimators=300, learning_rate=0.5, max_depth=3, min_samples_split=4,
+    gbs = GradientBoostingSurvivalAnalysis(n_estimators=500, learning_rate=0.5, max_depth=3, min_samples_split=4,
                                            min_samples_leaf=1, subsample=0.5, dropout_rate=0.2, random_state=seed)
     # gbs = GradientBoostingSurvivalAnalysis(random_state=seed)
     # msa = MinlipSurvivalAnalysis()
