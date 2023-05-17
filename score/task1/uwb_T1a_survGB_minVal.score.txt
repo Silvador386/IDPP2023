@@ -1,0 +1,1 @@
+uwb_T1a_survGB_minVal 0.714 0.806 0.898 110

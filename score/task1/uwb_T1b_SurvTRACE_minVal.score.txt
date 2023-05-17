@@ -1,0 +1,1 @@
+uwb_T1b_SurvTRACE_minVal 0.297 0.42 0.543 128
