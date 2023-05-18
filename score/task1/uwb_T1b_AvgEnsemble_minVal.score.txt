@@ -1,0 +1,1 @@
+uwb_T1b_AvgEnsemble_minVal 0.488 0.592 0.695 128
