@@ -10,6 +10,9 @@ def filenames_in_folder(dir_path):
         break
     return file_names
 
+def read_txt(file_path):
+    return pd.read_csv(file_path, sep=" ", header=None)
+
 
 def read_dfs(dir_path):
     file_names = filenames_in_folder(dir_path)

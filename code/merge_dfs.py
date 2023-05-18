@@ -5,11 +5,11 @@ from merge_strategies import transpose_df_by_uniques, group_ts_df_by_id
 def merge_dfs(dfs, dataset_name, id_feat, dataset_type="train"):
     prep_df_for_merge = transpose_df_by_uniques
 
-    if dataset_type == "train":
-        merged_df = pd.merge(dfs[f"{dataset_name}_train-static-vars"], dfs[f"{dataset_name}_train-outcomes"],
-                             on="patient_id", how="outer")
-    else:
-        merged_df = dfs[f"{dataset_name}_test-static-vars"]
+    # if dataset_type == "train":
+    merged_df = pd.merge(dfs[f"{dataset_name}_{dataset_type}-static-vars"], dfs[f"{dataset_name}_{dataset_type}-outcomes"],
+                         on="patient_id", how="outer")
+    # else:
+    #     merged_df = dfs[f"{dataset_name}_test-static-vars"]
 
     relapses_df = dfs[f"{dataset_name}_{dataset_type}-relapses"]
     ts_feats = ["delta_relapse_time0"]

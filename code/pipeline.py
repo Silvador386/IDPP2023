@@ -6,7 +6,7 @@ import random
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from io_dfs import read_dfs, save_predictions
+from io_dfs import read_dfs, save_predictions, read_txt, filenames_in_folder
 from merge_dfs import merge_dfs, merge_multiple
 from preprocessing import preprocess, fastai_ccnames, fastai_tab, fastai_fill_split_xy, y_to_struct_array
 from classification import init_classifiers, fit_models
@@ -58,7 +58,31 @@ class IDPPPipeline:
         self.merged_df = preprocess(self.merged_df)
 
         self.X, self.y, _ = fastai_fill_split_xy(self.merged_df, self.seed)
-        self.X_test = self.X.loc[self.test_ids]
+
+        self.X_test, self.y_test = self.X.loc[self.test_ids], self.y.loc[self.test_ids]
+
+        file_dir = "../out/hulat/task1/"
+        file_names = filenames_in_folder(file_dir)
+        for file_name in file_names:
+            if "T1b" not in file_name:
+                continue
+            submitted_predictions = read_txt(f"{file_dir}{file_name}")
+            #
+            # c_score = concordance_index_censored(self.y_test["outcome_occurred"].astype(bool),
+            #                                      self.y_test["outcome_time"],
+            #                                      submitted_predictions.iloc[:, 1])
+            # print(file_name, c_score)
+
+            # struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
+            # y_s = y_to_struct_array(self.y_test[["outcome_occurred", "outcome_time"]], struct_dtype)
+            # auc_scores = cumulative_dynamic_auc(y_s, y_s, submitted_predictions.iloc[:, 1], [2, 4, 6, 8, 10])
+            # print(file_name, auc_scores)
+
+            print()
+
+
+
+
         self.X, self.y = self.X.loc[self.train_ids], self.y.loc[self.train_ids]
         self.y_struct = y_to_struct_array(self.y, dtype=[('outcome_occurred', '?'), ('outcome_time', '<f8')])
 
@@ -265,12 +289,12 @@ def main():
 
     seed_basic(DEFAULT_RANDOM_SEED)
 
-    DATASET = "datasetA"
+    DATASET = "datasetB"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 
     pipeline = IDPPPipeline(DATASET_DIR, DATASET, ID_FEAT, DEFAULT_RANDOM_SEED)
-    pipeline.run()
+    # pipeline.run()
     # pipeline.param_sweep()
 
 if __name__ == "__main__":
