@@ -190,9 +190,9 @@ class SurvTraceWrap:
 #     evaluator.eval(model, (df_test, df_y_test))
 #     print("done")
 #
-#     scores = []
+#     score = []
 #     for X_pred, y_pred in zip([df_train, df_val], [df_y_train, df_y_val]):
 #         preds = model.predict(X_pred, batch_size=64)
-#         scores.append(concordance_index_censored(y_pred["event"].astype(bool), y_pred["duration"], preds[:, -1]))
+#         score.append(concordance_index_censored(y_pred["event"].astype(bool), y_pred["duration"], preds[:, -1]))
 #
-#     return model, scores[0], scores[1]
+#     return model, score[0], score[1]

@@ -61,27 +61,6 @@ class IDPPPipeline:
 
         self.X_test, self.y_test = self.X.loc[self.test_ids], self.y.loc[self.test_ids]
 
-        file_dir = "../out/hulat/task1/"
-        file_names = filenames_in_folder(file_dir)
-        for file_name in file_names:
-            if "T1b" not in file_name:
-                continue
-            submitted_predictions = read_txt(f"{file_dir}{file_name}")
-            #
-            # c_score = concordance_index_censored(self.y_test["outcome_occurred"].astype(bool),
-            #                                      self.y_test["outcome_time"],
-            #                                      submitted_predictions.iloc[:, 1])
-            # print(file_name, c_score)
-
-            # struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
-            # y_s = y_to_struct_array(self.y_test[["outcome_occurred", "outcome_time"]], struct_dtype)
-            # auc_scores = cumulative_dynamic_auc(y_s, y_s, submitted_predictions.iloc[:, 1], [2, 4, 6, 8, 10])
-            # print(file_name, auc_scores)
-
-            print()
-
-
-
 
         self.X, self.y = self.X.loc[self.train_ids], self.y.loc[self.train_ids]
         self.y_struct = y_to_struct_array(self.y, dtype=[('outcome_occurred', '?'), ('outcome_time', '<f8')])
@@ -251,6 +230,64 @@ class IDPPPipeline:
                        f"Val C-Score": val_c_score[0],
                        })
 
+    def plot_submission_results(self):
+        file_dir = "../score/task1/"
+        file_names = filenames_in_folder(file_dir)
+        for file_name in file_names:
+            if "T1b" not in file_name:
+                continue
+            submitted_predictions = read_txt(f"{file_dir}{file_name}")
+            #
+            # c_score = concordance_index_censored(self.y_test["outcome_occurred"].astype(bool),
+            #                                      self.y_test["outcome_time"],
+            #                                      submitted_predictions.iloc[:, 1])
+            # print(file_name, c_score)
+
+            # struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
+            # y_s = y_to_struct_array(self.y_test[["outcome_occurred", "outcome_time"]], struct_dtype)
+            # auc_scores = cumulative_dynamic_auc(y_s, y_s, submitted_predictions.iloc[:, 1], [2, 4, 6, 8, 10])
+            # print(file_name, auc_scores)
+            submitted_predictions = submitted_predictions.to_numpy()[0]
+            print(submitted_predictions)
+            print(
+                f"{submitted_predictions[0]} AUC: {submitted_predictions[2:17:3]} | Avg: {np.average(submitted_predictions[2:17:3])}\n{'=' * 80}")
+
+        def plot_CIndex(file_names):
+            score_data = [read_txt(f"{file_dir}{file_name}") for file_name in file_names if "T1b" in file_name]
+            score_df = pd.concat(score_data)
+            score_df[0] = ["-".join(name.removesuffix(".txt").split("_")[-2:]) if "minVal" in name else
+                           name.removesuffix(".txt").split("_")[-1] for name in score_df[0]]
+            score_df.columns = ["name", "lc", "c", "hc", "count"]
+            score_df = score_df.sort_values(by="c", ascending=True)
+
+            plt.style.use(["seaborn-v0_8-whitegrid"])
+            import matplotlib.pyplot as mpl
+            mpl.rcParams['font.size'] = 10
+
+            fig, ax = plt.subplots()
+            fig.subplots_adjust(left=0.28)
+
+            for i, interval in enumerate(score_df[["lc", "hc"]].values):
+                xerr = (interval[1] - interval[0]) / 2
+                ax.errorbar(
+                    score_df["c"].iloc[i], score_df["name"].iloc[i],  xerr=xerr, linestyle='', marker='_',
+                    capsize=4, color="indigo"
+                )
+            ax.scatter(score_df["c"], score_df["name"],  color="black",)
+
+            ax.set_xlabel('C-Index', fontweight='bold')
+            ax.set_ylabel('Submitted run', fontweight='bold')
+            ax.set_xlim((0, 1))
+            # ax.set_xticks(np.arange(0, 1.01, step=0.05))
+            ax.set_title('C-Index with Confidence intervals, Dataset B', fontsize=14, fontweight='bold')
+            # ax.legend()
+            # plt.grid()
+            plt.savefig("../graphs/CIndexB.eps")
+            plt.show()
+
+
+
+
     def run_ensemble(self):
         from sksurv.meta import EnsembleSelection, EnsembleSelectionRegressor, Stacking
 
@@ -294,6 +331,7 @@ def main():
     ID_FEAT = "patient_id"
 
     pipeline = IDPPPipeline(DATASET_DIR, DATASET, ID_FEAT, DEFAULT_RANDOM_SEED)
+    pipeline.plot_submission_results()
     # pipeline.run()
     # pipeline.param_sweep()
 
