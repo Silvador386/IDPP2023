@@ -231,6 +231,11 @@ class IDPPPipeline:
                        })
 
     def plot_submission_results(self):
+        plt.style.use(["seaborn-v0_8-whitegrid"])
+        import matplotlib.pyplot as mpl
+        mpl.rcParams['font.size'] = 10
+
+
         file_dir = "../score/task1/"
         file_names = filenames_in_folder(file_dir)
         for file_name in file_names:
@@ -260,10 +265,6 @@ class IDPPPipeline:
             score_df.columns = ["name", "lc", "c", "hc", "count"]
             score_df = score_df.sort_values(by="c", ascending=True)
 
-            plt.style.use(["seaborn-v0_8-whitegrid"])
-            import matplotlib.pyplot as mpl
-            mpl.rcParams['font.size'] = 10
-
             fig, ax = plt.subplots()
             fig.subplots_adjust(left=0.28)
 
@@ -285,7 +286,57 @@ class IDPPPipeline:
             plt.savefig("../graphs/CIndexB.eps")
             plt.show()
 
+        def plot_wandb():
+            datasetA_runs = ["0pqogcd9", "pefhr65z", "bmxri49g", "eg47otd5", "tyke6gd4", "9ckubkgv", "i02w78l0", "tcuu3nlg", "gpibc3q4"]
+            datasetB_runs = []
 
+            type_name = "Val"
+            save_name = f"{type_name}C_{self.dataset_name[-1]}_minval"
+
+            api = wandb.Api()
+            entity, project = 'mrhanzl', self.project
+            runs = api.runs(entity + "/" + project)
+
+            histories = []
+            for run in runs:
+                if run.id not in datasetA_runs:
+                    continue
+                history = run.history()
+                histories.append((run.name, history))
+
+            def sort_f(hist_entry):
+                return hist_entry[1][f"{type_name} C-Score Average"].iloc[-1]
+            histories.sort(key=sort_f, reverse=True)
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            # fig.subplots_adjust(right=0.9)
+            # fig.subplots_adjust(left=0.28)
+            for name, history in histories:
+                if "minval" not in name.lower():
+                    continue
+                step = history.get("_step")
+                avg = history.get(f"{type_name} C-Score Average")
+                std = history.get(f"{type_name} C-Std")
+                ax.plot(step, avg, label=name, marker='|', linewidth=2, markersize=8)
+                ax.fill_between(step, avg - std, avg + std, alpha=0.2)
+
+            plt.xticks(fontsize=12)
+            plt.yticks(fontsize=12)
+            ax.set_xlabel('Steps', fontweight='bold', fontsize=14)
+            ax.set_ylabel('C-Score', fontweight='bold', fontsize=14)
+            ax.set_xlim((0, 100))
+            # ax.set_xticks(np.arange(0, 1.01, step=0.05))
+            ax.set_title(f'{"Validation" if type_name == "Val" else "Train"} C-Index,'
+                         f' Dataset {self.dataset_name[-1]}', fontsize=16, fontweight='bold')
+            # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            ax.legend(loc='lower center', bbox_to_anchor=(0.5, 0),
+                      ncol=3, fancybox=True, shadow=True, frameon=True, framealpha=1, facecolor="white", edgecolor="black")
+
+            plt.savefig(f"../graphs/{save_name}.png")
+            plt.savefig(f"../graphs/{save_name}.pdf")
+            plt.savefig(f"../graphs/{save_name}.svg")
+            plt.savefig(f"../graphs/{save_name}.eps")
+            plt.show()
 
 
     def run_ensemble(self):
@@ -326,7 +377,7 @@ def main():
 
     seed_basic(DEFAULT_RANDOM_SEED)
 
-    DATASET = "datasetB"
+    DATASET = "datasetA"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 
