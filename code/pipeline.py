@@ -236,10 +236,11 @@ class IDPPPipeline:
         mpl.rcParams['font.size'] = 10
 
 
-        file_dir = "../score/task1/"
+        file_dir = "../score/task2/"
         file_names = filenames_in_folder(file_dir)
+        scores = []
         for file_name in file_names:
-            if "T1b" not in file_name:
+            if "T2a" not in file_name:
                 continue
             submitted_predictions = read_txt(f"{file_dir}{file_name}")
             #
@@ -257,41 +258,65 @@ class IDPPPipeline:
             print(
                 f"{submitted_predictions[0]} AUC: {submitted_predictions[2:17:3]} | Avg: {np.average(submitted_predictions[2:17:3])}\n{'=' * 80}")
 
+        score_data = [read_txt(f"{file_dir}{file_name}") for file_name in file_names if f"T2{self.dataset_name[-1].lower()}" in file_name]
+        score_df = pd.concat(score_data)
+        score_df[0] = ["-".join(name.removesuffix(".txt").split("_")[-2:]) if "minVal" in name else
+                       name.removesuffix(".txt").split("_")[-1] for name in score_df[0]]
+
+        auroc_cols = [f"{'L' if i%3==0 else '' if i%3==1 else 'H'}AUROC_{(i//3)*2+2}"for i in range(15)]
+        oe_cols = [f"{'L' if i%3==0 else '' if i%3==1 else 'H'}OE_{(i//3)*2+2}"for i in range(15)]
+        col_names = ["name", *auroc_cols, * oe_cols, "count"]
+        score_df.columns = col_names
+        score_df = score_df.iloc[score_df.filter(regex=f"^{'AUROC'}").mean(axis=1).argsort()]  # sort by avg auroc
+        score_df = score_df.iloc[::-1]
+        scores = score_df.to_numpy()
+
+        for line in scores:
+            print(line[0])
+            print("AUROC:", *[f"& {line[2+i*3]} ({line[1+i*3]}--{line[3+i*3]})" for i in range(5)])
+            print("O/E Ratio:", *[f"& {line[17+i*3]} ({line[16+i*3]}--{line[18+i*3]})" for i in range(5)])
+            print("="*80)
+
         def plot_CIndex(file_names):
-            score_data = [read_txt(f"{file_dir}{file_name}") for file_name in file_names if "T1b" in file_name]
+            score_data = [read_txt(f"{file_dir}{file_name}") for file_name in file_names if f"T1{self.dataset_name[-1].lower()}" in file_name]
             score_df = pd.concat(score_data)
             score_df[0] = ["-".join(name.removesuffix(".txt").split("_")[-2:]) if "minVal" in name else
                            name.removesuffix(".txt").split("_")[-1] for name in score_df[0]]
             score_df.columns = ["name", "lc", "c", "hc", "count"]
             score_df = score_df.sort_values(by="c", ascending=True)
 
-            fig, ax = plt.subplots()
+            name_map = {'SurvTRACE-minVal': "SurvTRACE - MinVal", 'survRF': "Random Forest", 'CGBSA': "CGBSA", 'survRFmri': "Random Forest MRI", 'survGB': "Gradient Boosting",
+            "AvgEnsemble": 'Ensemble Avg.', 'AvgEnsemble-minVal': 'Ensemble Avg. - MinVal', 'survGB-minVal': 'Gradient Boosting - MinVal', 'SurvTRACE': "SurvTRACE"}
+            score_df["name"].replace(name_map, inplace=True)
+            fig, ax = plt.subplots(figsize=(10, 8))
             fig.subplots_adjust(left=0.28)
 
             for i, interval in enumerate(score_df[["lc", "hc"]].values):
                 xerr = (interval[1] - interval[0]) / 2
                 ax.errorbar(
-                    score_df["c"].iloc[i], score_df["name"].iloc[i],  xerr=xerr, linestyle='', marker='_',
-                    capsize=4, color="indigo"
+                    score_df["c"].iloc[i], score_df["name"].iloc[i],  xerr=xerr,
+                    capsize=8, linewidth=3, markersize=10, color="black"
                 )
-            ax.scatter(score_df["c"], score_df["name"],  color="black",)
+            ax.scatter(score_df["c"], score_df["name"], marker="D", color="black", linewidth=8)
 
-            ax.set_xlabel('C-Index', fontweight='bold')
-            ax.set_ylabel('Submitted run', fontweight='bold')
+            ax.set_xlabel('C-Index', fontweight='bold', fontsize=22)
+            ax.set_ylabel('Submitted run', fontweight='bold', fontsize=22)
             ax.set_xlim((0, 1))
-            # ax.set_xticks(np.arange(0, 1.01, step=0.05))
-            ax.set_title('C-Index with Confidence intervals, Dataset B', fontsize=14, fontweight='bold')
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            # ax.set_title(f'Dataset {self.dataset_name[-1]}', fontsize=20, fontweight='bold')
             # ax.legend()
             # plt.grid()
-            plt.savefig("../graphs/CIndexB.eps")
+            plt.tight_layout()
+            plt.savefig(f"../graphs/CIndex{self.dataset_name[-1]}.eps")
             plt.show()
 
         def plot_wandb():
             datasetA_runs = ["0pqogcd9", "pefhr65z", "bmxri49g", "eg47otd5", "tyke6gd4", "9ckubkgv", "i02w78l0", "tcuu3nlg", "gpibc3q4"]
-            datasetB_runs = []
+            datasetB_runs = ["aksefkpg", "dd6u6bby", "4j1qq5bt", "o1dl9vrp", "doh6ghxb", "38z0p36o", "3sojqzwl", "25vl5d6k", "xqqj2y75"]
 
             type_name = "Val"
-            save_name = f"{type_name}C_{self.dataset_name[-1]}_minval"
+            save_name = f"{type_name}C_{self.dataset_name[-1]}"
 
             api = wandb.Api()
             entity, project = 'mrhanzl', self.project
@@ -299,7 +324,7 @@ class IDPPPipeline:
 
             histories = []
             for run in runs:
-                if run.id not in datasetA_runs:
+                if run.id not in datasetB_runs:
                     continue
                 history = run.history()
                 histories.append((run.name, history))
@@ -308,36 +333,46 @@ class IDPPPipeline:
                 return hist_entry[1][f"{type_name} C-Score Average"].iloc[-1]
             histories.sort(key=sort_f, reverse=True)
 
-            fig, ax = plt.subplots(figsize=(10, 6))
+            fig, ax = plt.subplots(figsize=(10, 8))
             # fig.subplots_adjust(right=0.9)
             # fig.subplots_adjust(left=0.28)
             for name, history in histories:
-                if "minval" not in name.lower():
+                if "minval" in name.lower():
                     continue
                 step = history.get("_step")
                 avg = history.get(f"{type_name} C-Score Average")
                 std = history.get(f"{type_name} C-Std")
-                ax.plot(step, avg, label=name, marker='|', linewidth=2, markersize=8)
+                ax.plot(step, avg, label=name, marker='|', linewidth=4, markersize=16)
                 ax.fill_between(step, avg - std, avg + std, alpha=0.2)
 
-            plt.xticks(fontsize=12)
-            plt.yticks(fontsize=12)
-            ax.set_xlabel('Steps', fontweight='bold', fontsize=14)
-            ax.set_ylabel('C-Score', fontweight='bold', fontsize=14)
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            ax.set_xlabel('Steps', fontweight='bold', fontsize=22)
+            ax.set_ylabel('C-Score', fontweight='bold', fontsize=22)
             ax.set_xlim((0, 100))
+            ax.set_ylim((0.4, 0.85))
             # ax.set_xticks(np.arange(0, 1.01, step=0.05))
-            ax.set_title(f'{"Validation" if type_name == "Val" else "Train"} C-Index,'
-                         f' Dataset {self.dataset_name[-1]}', fontsize=16, fontweight='bold')
+            # ax.set_title(f'{"Validation" if type_name == "Val" else "Train"} C-Index,'
+            #              f' Dataset {self.dataset_name[-1]}', fontsize=18, fontweight='bold')
             # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-            ax.legend(loc='lower center', bbox_to_anchor=(0.5, 0),
-                      ncol=3, fancybox=True, shadow=True, frameon=True, framealpha=1, facecolor="white", edgecolor="black")
+            legend = ax.legend(loc='lower center', bbox_to_anchor=(0.5, 0),
+                      ncol=2, fancybox=True, shadow=True, fontsize=20,
+                      frameon=True, framealpha=1, facecolor="white", edgecolor="black")
+            if "minval" in save_name:  # hotfix
+                for i, text in enumerate(legend.texts):
+                    legend.texts[i].set_text(text.get_text().removesuffix(" - MinVal"))
 
-            plt.savefig(f"../graphs/{save_name}.png")
+            plt.tight_layout()
+            # plt.savefig(f"../graphs/{save_name}.png")
             plt.savefig(f"../graphs/{save_name}.pdf")
-            plt.savefig(f"../graphs/{save_name}.svg")
-            plt.savefig(f"../graphs/{save_name}.eps")
+            # plt.savefig(f"../graphs/{save_name}.svg")
+            # plt.savefig(f"../graphs/{save_name}.eps")
             plt.show()
 
+        file_dir = "../score/task1/"
+        file_names = filenames_in_folder(file_dir)
+        plot_CIndex(file_names)
+        # plot_wandb()
 
     def run_ensemble(self):
         from sksurv.meta import EnsembleSelection, EnsembleSelectionRegressor, Stacking
