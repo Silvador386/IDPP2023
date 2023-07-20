@@ -324,7 +324,7 @@ class IDPPPipeline:
 
             histories = []
             for run in runs:
-                if run.id not in datasetB_runs:
+                if run.id not in datasetA_runs:
                     continue
                 history = run.history()
                 histories.append((run.name, history))
@@ -369,10 +369,77 @@ class IDPPPipeline:
             # plt.savefig(f"../graphs/{save_name}.eps")
             plt.show()
 
-        file_dir = "../score/task1/"
-        file_names = filenames_in_folder(file_dir)
-        plot_CIndex(file_names)
-        # plot_wandb()
+        def plot_wandb_box():
+            datasetA_runs = ["0pqogcd9", "pefhr65z", "bmxri49g", "eg47otd5", "tyke6gd4", "9ckubkgv", "i02w78l0",
+                             "tcuu3nlg", "gpibc3q4"]
+            datasetB_runs = ["aksefkpg", "dd6u6bby", "4j1qq5bt", "o1dl9vrp", "doh6ghxb", "38z0p36o", "3sojqzwl",
+                             "25vl5d6k", "xqqj2y75"]
+
+            type_name = "Val"
+            save_name = f"{type_name}C_{self.dataset_name[-1]}_box_min"
+
+            api = wandb.Api()
+            entity, project = 'mrhanzl', self.project
+            runs = api.runs(entity + "/" + project)
+
+            histories = []
+            for run in runs:
+                if run.id not in datasetB_runs:
+                    continue
+                history = run.history()
+                histories.append((run.name, history))
+
+            def sort_f(hist_entry):
+                return hist_entry[1][f"{type_name} C-Score Average"].iloc[-1]
+
+            histories.sort(key=sort_f, reverse=True)
+
+            # sns.set_palette("viridis")
+            # current_palette = sns.color_palette()
+            # inverted_palette = current_palette[::-1]
+            # sns.set_palette(inverted_palette)
+
+            fig, ax = plt.subplots(figsize=(10, 3))
+            values_df = {name: history.get(f"{type_name} C-Score") for name, history in histories if
+                         "minval" in name.lower()}
+            # values_df.update({name: history.get(f"{type_name} C-Score") for name, history in histories if
+            #              "minval" in name.lower()})
+            values_df = pd.DataFrame(values_df)
+            values_df = values_df.clip(upper=0.995)
+
+            values_df.columns = [name.split(" - ")[0] for name in values_df.columns.values]
+            sns.boxplot(values_df, orient="h", linewidth=2, fliersize=10)
+
+            plt.xticks(fontsize=24)
+            plt.yticks(fontsize=24)
+            ax.set_ylabel('Method', fontweight='bold', fontsize=22)
+            ax.set_xlabel('C-Index', fontweight='bold', fontsize=22)
+            ax.set_xlim((0, 1))
+            # ax.set_ylim((0.4, 0.85))
+            # ax.set_xticks(np.arange(0, 1.01, step=0.05))
+            # ax.set_title(f'{"Validation" if type_name == "Val" else "Train"} C-Index,'
+            #              f' Dataset {self.dataset_name[-1]}', fontsize=18, fontweight='bold')
+            # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            # legend = ax.legend(loc='lower center', bbox_to_anchor=(0.5, 0),
+            #                    ncol=2, fancybox=True, shadow=True, fontsize=20,
+            #                    frameon=True, framealpha=1, facecolor="white", edgecolor="black")
+            # if "minval" in save_name:  # hotfix
+            #     for i, text in enumerate(legend.texts):
+            #         legend.texts[i].set_text(text.get_text().removesuffix(" - MinVal"))
+
+            plt.tight_layout()
+            # plt.savefig(f"../graphs/{save_name}.png")
+            plt.savefig(f"../graphs/{save_name}.pdf")
+            # plt.savefig(f"../graphs/{save_name}.svg")
+            # plt.savefig(f"../graphs/{save_name}.eps")
+            plt.show()
+
+
+
+        # file_dir = "../score/task1/"
+        # file_names = filenames_in_folder(file_dir)
+        # plot_CIndex(file_names)
+        plot_wandb_box()
 
     def run_ensemble(self):
         from sksurv.meta import EnsembleSelection, EnsembleSelectionRegressor, Stacking
@@ -412,7 +479,7 @@ def main():
 
     seed_basic(DEFAULT_RANDOM_SEED)
 
-    DATASET = "datasetA"
+    DATASET = "datasetB"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 
