@@ -295,37 +295,9 @@ class IDPPPipeline:
             score_df["name"].replace(name_map, inplace=True)
             return score_df
 
-        def plot_CIndex(file_names):
-            score_df = get_score_from_txt(file_names)
-
-            fig, ax = plt.subplots(figsize=(10, 8))
-            fig.subplots_adjust(left=0.28)
-
-            for i, interval in enumerate(score_df[["lc", "hc"]].values):
-                xerr = (interval[1] - interval[0]) / 2
-                ax.errorbar(
-                    score_df["c"].iloc[i], score_df["name"].iloc[i],  xerr=xerr,
-                    capsize=8, linewidth=3, markersize=10, color="black"
-                )
-            ax.scatter(score_df["c"], score_df["name"], marker="D", color="black", linewidth=8)
-
-            ax.set_xlabel('C-Index', fontweight='bold', fontsize=22)
-            ax.set_ylabel('Submitted run', fontweight='bold', fontsize=22)
-            ax.set_xlim((0, 1))
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            # ax.set_title(f'Dataset {self.dataset_name[-1]}', fontsize=20, fontweight='bold')
-            # ax.legend()
-            # plt.grid()
-            plt.tight_layout()
-            plt.savefig(f"../graphs/CIndex{dataset_type}.eps")
-            plt.show()
-
         def plot_multi_C(file_names):
             test_scores_df = get_score_from_txt(file_names)
-            # test_scores_df = test_scores_df.set_index("name")
             test_scores_df = test_scores_df[["name", "lc", "c", "hc"]]
-            # test_scores_df = test_scores_df.rename(columns={"lc": 0.025, "c": 0.0, "hc": 0.975})
             test_scores_df["type"] = "Test"
 
             histories = get_histories()
@@ -334,28 +306,35 @@ class IDPPPipeline:
             values_df = pd.DataFrame(values_df)
             average_values = values_df.mean(axis=0)
             confidence_intervals = values_df.quantile(q=[0.025, 0.975])
-            values_df = values_df.clip(upper=0.995)
             wandb_scores_df = pd.concat([average_values, confidence_intervals.transpose()], axis=1)
+            wandb_scores_df = wandb_scores_df.clip(upper=0.995)
             wandb_scores_df = wandb_scores_df.reset_index()
             wandb_scores_df = wandb_scores_df.rename(columns={0.0: "c", 0.025: "lc", 0.975: "hc", "index": "name"})
             wandb_scores_df["type"] = "Val"
+
+            wandb_scores_df["name_ordered"] = pd.Categorical(wandb_scores_df["name"], categories=test_scores_df["name"],
+                                                             ordered=True)
+            wandb_scores_df = wandb_scores_df.sort_values("name_ordered")
 
             combined_df = pd.concat([test_scores_df, wandb_scores_df])
 
             fig, ax = plt.subplots(figsize=(10, 8))
             fig.subplots_adjust(left=0.28)
-            colors = ["blue", "black"]
+            colors = ["tab:blue", "tab:orange"]
             for offset, score_df in enumerate([wandb_scores_df, test_scores_df]):
 
                 y_pos = np.array(range(len(score_df["name"])))
 
                 for i, interval in enumerate(score_df[["lc", "hc"]].values):
                     xerr = (interval[1] - interval[0]) / 2
+                    if score_df["c"].iloc[i] + xerr >= 0.995:
+                       xerr = 0.995 - score_df["c"].iloc[i]
+
                     ax.errorbar(
-                        score_df["c"].iloc[i], y_pos[i] + offset * 0.2, xerr=xerr,
-                        capsize=8, linewidth=3, markersize=10, color=colors[offset],
+                        score_df["c"].iloc[i], y_pos[i] - 0.1 + offset * 0.2, xerr=xerr, elinewidth=4,
+                        capsize=10, linewidth=4, markersize=10, color=colors[offset],
                     )
-                ax.scatter(score_df["c"], y_pos + offset * 0.2, marker="D", color=colors[offset], linewidth=8)
+                ax.scatter(score_df["c"], y_pos - 0.1 + offset * 0.2, marker="D", color=colors[offset], linewidth=8)
 
             ax.set_xlabel('C-Index', fontweight='bold', fontsize=22)
             ax.set_ylabel('Submitted run', fontweight='bold', fontsize=22)
@@ -363,10 +342,14 @@ class IDPPPipeline:
             plt.xticks(fontsize=20)
             plt.yticks(fontsize=20, ticks=y_pos, labels=list(score_df["name"]))
             # ax.set_title(f'Dataset {self.dataset_name[-1]}', fontsize=20, fontweight='bold')
-            # ax.legend()
+            # ax.legend(["Val", "Test"], fontsize=20, loc="lower left")
+            ax.legend(["Val", "Test"], loc='lower left',
+                      ncol=1, fancybox=True, shadow=True, fontsize=20,
+                      frameon=True, framealpha=1, facecolor="white", edgecolor="black")
             # plt.grid()
             plt.tight_layout()
-            plt.savefig(f"../graphs/CIndex{dataset_type}.eps")
+            plt.savefig(f"../graphs/CIndex_{dataset_type}comparison.png")
+            plt.savefig(f"../graphs/CIndex_{dataset_type}comparison.pdf")
             plt.show()
 
         def get_histories():
@@ -537,7 +520,7 @@ def main():
 
     seed_basic(DEFAULT_RANDOM_SEED)
 
-    DATASET = "datasetB"
+    DATASET = "datasetA"
     DATASET_DIR = f"../data/{DATASET}_train"
     ID_FEAT = "patient_id"
 
@@ -545,6 +528,7 @@ def main():
     pipeline.plot_submission_results()
     # pipeline.run()
     # pipeline.param_sweep()
+
 
 if __name__ == "__main__":
     main()
