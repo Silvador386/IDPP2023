@@ -236,53 +236,15 @@ class IDPPPipeline:
         mpl.rcParams['font.size'] = 10
 
 
-        file_dir = "../score/task1/"
-        file_names = filenames_in_folder(file_dir)
+        task1_file_dir = "../score/task1/"
+        task2_file_dir = "../score/task2/"
+        task1_file_names = filenames_in_folder(task1_file_dir)
 
         dataset_type = self.dataset_name[-1]
         type_name = "Val"
         save_name = f"{type_name}C_{dataset_type}"
 
-        # scores = []
-        # for file_name in file_names:
-        #     if "T1a" not in file_name:
-        #         continue
-        #     submitted_predictions = read_txt(f"{file_dir}{file_name}")
-            #
-            # c_score = concordance_index_censored(self.y_test["outcome_occurred"].astype(bool),
-            #                                      self.y_test["outcome_time"],
-            #                                      submitted_predictions.iloc[:, 1])
-            # print(file_name, c_score)
-
-            # struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
-            # y_s = y_to_struct_array(self.y_test[["outcome_occurred", "outcome_time"]], struct_dtype)
-            # auc_scores = cumulative_dynamic_auc(y_s, y_s, submitted_predictions.iloc[:, 1], [2, 4, 6, 8, 10])
-            # print(file_name, auc_scores)
-            # submitted_predictions = submitted_predictions.to_numpy()[0]
-            # print(submitted_predictions)
-            # print(
-            #     f"{submitted_predictions[0]} AUC: {submitted_predictions[2:17:3]} | Avg: {np.average(submitted_predictions[2:17:3])}\n{'=' * 80}")
-
-        # score_data = [read_txt(f"{file_dir}{file_name}") for file_name in file_names if f"T1{self.dataset_name[-1].lower()}" in file_name]
-        # score_df = pd.concat(score_data)
-        # print(score_df[[0, 2, 1, 3]].sort_values(by=2, ascending=False))
-        # score_df[0] = ["-".join(name.removesuffix(".txt").split("_")[-2:]) if "minVal" in name else
-        #                name.removesuffix(".txt").split("_")[-1] for name in score_df[0]]
-        #
-        # auroc_cols = [f"{'L' if i%3==0 else '' if i%3==1 else 'H'}AUROC_{(i//3)*2+2}"for i in range(15)]
-        # oe_cols = [f"{'L' if i%3==0 else '' if i%3==1 else 'H'}OE_{(i//3)*2+2}"for i in range(15)]
-        # col_names = ["name", *auroc_cols, * oe_cols, "count"]
-        # score_df.columns = col_names
-        # score_df = score_df.iloc[score_df.filter(regex=f"^{'AUROC'}").mean(axis=1).argsort()]  # sort by avg auroc
-        # score_df = score_df.iloc[::-1]
-        # scores = score_df.to_numpy()
-        #
-        # for line in scores:
-        #     print(line[0])
-        #     print("AUROC:", *[f"& {line[2+i*3]} ({line[1+i*3]}--{line[3+i*3]})" for i in range(5)])
-        #     print("O/E Ratio:", *[f"& {line[17+i*3]} ({line[16+i*3]}--{line[18+i*3]})" for i in range(5)])
-        #     print("="*80)
-        def get_score_from_txt(file_names):
+        def get_task1_scores_from_txt(file_dir, file_names):
             score_data = [read_txt(f"{file_dir}{file_name}") for file_name in file_names if f"T1{self.dataset_name[-1].lower()}" in file_name]
             score_df = pd.concat(score_data)
             score_df[0] = ["-".join(name.removesuffix(".txt").split("_")[-2:]) if "minVal" in name else
@@ -295,8 +257,103 @@ class IDPPPipeline:
             score_df["name"].replace(name_map, inplace=True)
             return score_df
 
-        def plot_multi_C(file_names):
-            test_scores_df = get_score_from_txt(file_names)
+        def get_task2_scores(file_dir):
+            file_names = filenames_in_folder(file_dir)
+            score_data = [read_txt(f"{file_dir}{file_name}") for file_name in file_names if
+                          f"T2{self.dataset_name[-1].lower()}" in file_name]
+            score_df = pd.concat(score_data)
+            score_df[0] = ["-".join(name.removesuffix(".txt").split("_")[-2:]) if "minVal" in name else
+                           name.removesuffix(".txt").split("_")[-1] for name in score_df[0]]
+
+            auroc_cols = [f"{'L' if i % 3 == 0 else '' if i % 3 == 1 else 'H'}AUROC (0-{(i // 3) * 2 + 2})" for i in
+                          range(15)]
+            oe_cols = [f"{'L' if i % 3 == 0 else '' if i % 3 == 1 else 'H'}O/E (0-{(i // 3) * 2 + 2})" for i in range(15)]
+            col_names = ["name", *auroc_cols, *oe_cols, "count"]
+            score_df.columns = col_names
+            score_df = score_df.iloc[score_df.filter(regex=f"^{'AUROC'}").mean(axis=1).argsort()]  # sort by avg auroc
+            score_df = score_df.iloc[::-1]
+
+            name_map = {'SurvTRACE-minVal': "SurvTRACE - MinVal", 'survRF': "Random Forest", 'CGBSA': "CGBSA",
+                        'survRFmri': "Random Forest MRI", 'survGB': "Gradient Boosting",
+                        "AvgEnsemble": 'Ensemble Avg.', 'AvgEnsemble-minVal': 'Ensemble Avg. - MinVal',
+                        'survGB-minVal': 'Gradient Boosting - MinVal', 'SurvTRACE': "SurvTRACE"}
+            score_df["name"].replace(name_map, inplace=True)
+
+            return score_df
+
+        def make_spider(df, yticks, save_loc, ytick_bold: int = None, legend=True):
+            import matplotlib.colors as mcolors
+
+            colors = [*mcolors.TABLEAU_COLORS]
+            categories = df.columns.values
+            N = len(categories)
+
+            angles = [n / float(N) * 2 * np.pi for n in range(N)]
+
+            plt.rc('figure', figsize=(10, 8))
+            ax = plt.subplot(1, 1, 1, polar=True)
+
+            ax.set_theta_offset(np.pi / 2)
+            ax.set_theta_direction(-1)
+
+            plt.xticks(angles, categories, color='black', size=18, weight='bold')
+            ax.tick_params(axis='x', rotation=5.5)
+
+            ax.set_rlabel_position(0)
+            plt.yticks(yticks, color="black", size=18)
+            y_lim_low_val = yticks[0]
+            plt.ylim(y_lim_low_val, yticks[-1] + (yticks[-1] - yticks[-2]))
+
+            if ytick_bold:
+                labels = ax.get_yticklabels()
+                labels[ytick_bold].set_fontweight('bold')
+                labels[ytick_bold].set_fontsize(20)
+
+                gridlines = ax.yaxis.get_gridlines()
+                gridlines[ytick_bold].set_color("k")
+                gridlines[ytick_bold].set_linewidth(3)
+
+            angles = [0, *angles, 0]
+            for i, (name, values) in enumerate(df.iterrows()):
+                values = values.to_list()
+                values = [values[0], *values, values[0]]
+                ax.plot(angles, values, color=colors[i], linewidth=3, linestyle='solid')
+                ax.fill(angles, values, color=colors[i], alpha=0.2, label='_nolegend_')
+
+
+            if legend:
+                ax.legend(df.index.to_list(), loc='upper left', bbox_to_anchor=(-0.2, 1),
+                          ncol=1, fancybox=True, shadow=True, fontsize=20,
+                          frameon=True, framealpha=1, facecolor="white", edgecolor="black")
+            plt.tight_layout()
+            plt.savefig(f"{save_loc}.png")
+            plt.savefig(f"{save_loc}.pdf")
+            plt.show()
+
+
+        def plot_task2(file_dir):
+            scores = get_task2_scores(file_dir)
+
+            scores_auroc = scores.set_index("name").iloc[:, 1:16:3]
+            t2A_ticks = [0.7, 0.75, 0.8, 0.85, 0.9, ]
+            t2B_ticks = [0.4, 0.45, 0.5, 0.55, 0.6, ]
+            make_spider(scores_auroc, t2A_ticks, save_loc=f"../graphs/t2{dataset_type}auroc")
+
+            scores_oe = scores.set_index("name").iloc[:, 16:-1:3]
+            t2A_ticks_oe = [0.5, 1, 1.5, 2, 2.5]
+            t2B_ticks_oe = [0, 0.5, 1, 1.5, 2, ]
+            make_spider(
+                scores_oe,
+                t2A_ticks_oe,
+                save_loc=f"../graphs/t2{dataset_type}oe",
+                ytick_bold=1,
+                legend=False
+            )
+            # plot_multi_spider([scores_auroc, scores_oe], [t2A_ticks, t2A_ticks_oe])
+
+
+        def plot_multi_C(file_dir, file_names):
+            test_scores_df = get_task1_scores_from_txt(file_dir, file_names)
             test_scores_df = test_scores_df[["name", "lc", "c", "hc"]]
             test_scores_df["type"] = "Test"
 
@@ -473,13 +530,10 @@ class IDPPPipeline:
             # plt.savefig(f"../graphs/{save_name}.eps")
             plt.show()
 
-
-
-        # file_dir = "../score/task1/"
-        # file_names = filenames_in_folder(file_dir)
         # plot_CIndex(file_names)
         # plot_wandb_box()
-        plot_multi_C(file_names)
+        # plot_multi_C(task1_file_dir, task1_file_names)
+        plot_task2(task2_file_dir)
 
 
     def run_ensemble(self):
