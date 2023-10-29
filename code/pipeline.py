@@ -32,7 +32,7 @@ set_config(display="text")  # displays text representation of estimators
 
 class IDPPPipeline:
     OUTPUT_DIR = "../out"
-    num_iter = 100
+    num_iter = 10
     train_size = 0.8
     n_estimators = 100
 
@@ -314,11 +314,16 @@ class IDPPPipeline:
                 gridlines[ytick_bold].set_linewidth(3)
 
             angles = [0, *angles, 0]
+
             for i, (name, values) in enumerate(df.iterrows()):
                 values = values.to_list()
                 values = [values[0], *values, values[0]]
-                ax.plot(angles, values, color=colors[i], linewidth=3, linestyle='solid')
-                ax.fill(angles, values, color=colors[i], alpha=0.2, label='_nolegend_')
+                if i == -2:
+                    ax.plot(angles, values, color=colors[i], linewidth=5, linestyle='solid')
+                    ax.fill(angles, values, color=colors[i], alpha=0.5, label='_nolegend_', hatch="x")
+                else:
+                    ax.plot(angles, values, color=colors[i], linewidth=3, linestyle='solid')
+                    ax.fill(angles, values, color=colors[i], alpha=0.2, label='_nolegend_')
 
 
             if legend:
@@ -330,14 +335,15 @@ class IDPPPipeline:
             plt.savefig(f"{save_loc}.pdf")
             plt.show()
 
-
         def plot_task2(file_dir):
             scores = get_task2_scores(file_dir)
 
             scores_auroc = scores.set_index("name").iloc[:, 1:16:3]
             t2A_ticks = [0.7, 0.75, 0.8, 0.85, 0.9, ]
             t2B_ticks = [0.4, 0.45, 0.5, 0.55, 0.6, ]
-            make_spider(scores_auroc, t2A_ticks, save_loc=f"../graphs/t2{dataset_type}auroc")
+            make_spider(scores_auroc, t2A_ticks, save_loc=f"../graphs/t2{dataset_type}auroc",
+                        # ytick_bold=2
+                        )
 
             scores_oe = scores.set_index("name").iloc[:, 16:-1:3]
             t2A_ticks_oe = [0.5, 1, 1.5, 2, 2.5]
@@ -349,8 +355,6 @@ class IDPPPipeline:
                 ytick_bold=1,
                 legend=False
             )
-            # plot_multi_spider([scores_auroc, scores_oe], [t2A_ticks, t2A_ticks_oe])
-
 
         def plot_multi_C(file_dir, file_names):
             test_scores_df = get_task1_scores_from_txt(file_dir, file_names)
@@ -373,8 +377,6 @@ class IDPPPipeline:
                                                              ordered=True)
             wandb_scores_df = wandb_scores_df.sort_values("name_ordered")
 
-            combined_df = pd.concat([test_scores_df, wandb_scores_df])
-
             fig, ax = plt.subplots(figsize=(10, 8))
             fig.subplots_adjust(left=0.28)
             colors = ["tab:blue", "tab:orange"]
@@ -396,7 +398,18 @@ class IDPPPipeline:
             ax.set_xlabel('C-Index', fontweight='bold', fontsize=22)
             ax.set_ylabel('Submitted run', fontweight='bold', fontsize=22)
             ax.set_xlim((0, 1))
-            plt.xticks(fontsize=20)
+
+            plt.xticks([0, 0.2, 0.4, 0.5, 0.6, 0.8, 1], fontsize=20)
+
+            labels = ax.get_xticklabels()
+            labels[3].set_fontweight('bold')
+            labels[3].set_fontsize(20)
+
+            gridlines = ax.xaxis.get_gridlines()
+            gridlines[3].set_color("k")
+            gridlines[3].set_linewidth(3)
+            gridlines[3].set_linestyle("--")
+
             plt.yticks(fontsize=20, ticks=y_pos, labels=list(score_df["name"]))
             # ax.set_title(f'Dataset {self.dataset_name[-1]}', fontsize=20, fontweight='bold')
             # ax.legend(["Val", "Test"], fontsize=20, loc="lower left")
@@ -434,101 +447,6 @@ class IDPPPipeline:
             histories.sort(key=sort_f, reverse=True)
 
             return histories
-
-        def plot_wandb():
-            datasetA_runs = ["0pqogcd9", "pefhr65z", "bmxri49g", "eg47otd5", "tyke6gd4", "9ckubkgv", "i02w78l0", "tcuu3nlg", "gpibc3q4"]
-            datasetB_runs = ["aksefkpg", "dd6u6bby", "4j1qq5bt", "o1dl9vrp", "doh6ghxb", "38z0p36o", "3sojqzwl", "25vl5d6k", "xqqj2y75"]
-
-            dataset_type = self.dataset_name[-1]
-
-            type_name = "Val"
-            save_name = f"{type_name}C_{dataset_type}"
-
-            api = wandb.Api()
-            entity, project = 'mrhanzl', self.project
-            runs = api.runs(entity + "/" + project)
-
-            histories = []
-            for run in runs:
-
-                if run.id not in datasetA_runs:
-                    continue
-                history = run.history()
-                histories.append((run.name, history))
-
-            def sort_f(hist_entry):
-                return hist_entry[1][f"{type_name} C-Score Average"].iloc[-1]
-            histories.sort(key=sort_f, reverse=True)
-
-            fig, ax = plt.subplots(figsize=(10, 8))
-            # fig.subplots_adjust(right=0.9)
-            # fig.subplots_adjust(left=0.28)
-            for name, history in histories:
-                if "minval" in name.lower():
-                    continue
-                step = history.get("_step")
-                avg = history.get(f"{type_name} C-Score Average")
-                std = history.get(f"{type_name} C-Std")
-                ax.plot(step, avg, label=name, marker='|', linewidth=4, markersize=16)
-                ax.fill_between(step, avg - std, avg + std, alpha=0.2)
-
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            ax.set_xlabel('Steps', fontweight='bold', fontsize=22)
-            ax.set_ylabel('C-Score', fontweight='bold', fontsize=22)
-            ax.set_xlim((0, 100))
-            ax.set_ylim((0.4, 0.85))
-            # ax.set_xticks(np.arange(0, 1.01, step=0.05))
-            # ax.set_title(f'{"Validation" if type_name == "Val" else "Train"} C-Index,'
-            #              f' Dataset {self.dataset_name[-1]}', fontsize=18, fontweight='bold')
-            # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-            legend = ax.legend(loc='lower center', bbox_to_anchor=(0.5, 0),
-                      ncol=2, fancybox=True, shadow=True, fontsize=20,
-                      frameon=True, framealpha=1, facecolor="white", edgecolor="black")
-            if "minval" in save_name:  # hotfix
-                for i, text in enumerate(legend.texts):
-                    legend.texts[i].set_text(text.get_text().removesuffix(" - MinVal"))
-
-            plt.tight_layout()
-            # plt.savefig(f"../graphs/{save_name}.png")
-            plt.savefig(f"../graphs/{save_name}.pdf")
-            # plt.savefig(f"../graphs/{save_name}.svg")
-            # plt.savefig(f"../graphs/{save_name}.eps")
-            plt.show()
-
-        def plot_wandb_box():
-            histories = get_histories()
-            values_df = {name: history.get(f"{type_name} C-Score") for name, history in histories}
-            values_df = pd.DataFrame(values_df)
-
-            values_df.columns = [name.split(" - ")[0] for name in values_df.columns.values]
-
-            fig, ax = plt.subplots(figsize=(10, 3))
-            sns.boxplot(values_df, orient="h", hue="type", linewidth=2, fliersize=10)
-
-            plt.xticks(fontsize=24)
-            plt.yticks(fontsize=24)
-            ax.set_ylabel('Method', fontweight='bold', fontsize=22)
-            ax.set_xlabel('C-Index', fontweight='bold', fontsize=22)
-            ax.set_xlim((0, 1))
-            # ax.set_ylim((0.4, 0.85))
-            # ax.set_xticks(np.arange(0, 1.01, step=0.05))
-            # ax.set_title(f'{"Validation" if type_name == "Val" else "Train"} C-Index,'
-            #              f' Dataset {self.dataset_name[-1]}', fontsize=18, fontweight='bold')
-            # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-            # legend = ax.legend(loc='lower center', bbox_to_anchor=(0.5, 0),
-            #                    ncol=2, fancybox=True, shadow=True, fontsize=20,
-            #                    frameon=True, framealpha=1, facecolor="white", edgecolor="black")
-            # if "minval" in save_name:  # hotfix
-            #     for i, text in enumerate(legend.texts):
-            #         legend.texts[i].set_text(text.get_text().removesuffix(" - MinVal"))
-
-            plt.tight_layout()
-            plt.savefig(f"../graphs/{save_name}.png")
-            plt.savefig(f"../graphs/{save_name}.pdf")
-            # plt.savefig(f"../graphs/{save_name}.svg")
-            # plt.savefig(f"../graphs/{save_name}.eps")
-            plt.show()
 
         # plot_CIndex(file_names)
         # plot_wandb_box()
@@ -579,8 +497,8 @@ def main():
     ID_FEAT = "patient_id"
 
     pipeline = IDPPPipeline(DATASET_DIR, DATASET, ID_FEAT, DEFAULT_RANDOM_SEED)
-    pipeline.plot_submission_results()
-    # pipeline.run()
+    # pipeline.plot_submission_results()
+    pipeline.run()
     # pipeline.param_sweep()
 
 
