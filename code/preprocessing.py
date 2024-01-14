@@ -1,3 +1,5 @@
+from typing import Callable
+
 import pandas as pd
 import numpy as np
 from fastai.tabular.all import RandomSplitter, range_of, TabularPandas, \
@@ -54,7 +56,7 @@ feats_to_be_collapsed = [("new_or_enlarged_lesions_T2", 5, None),
                          ("number_of_total_lesions_T2", 3, None)]
 
 
-def preprocess(merged_df):
+def preprocess(merged_df: pd.DataFrame) -> pd.DataFrame:
     merged_df = merged_df.copy()
 
     features_to_encode = ["sex", "residence_classification", "ethnicity", 'ms_in_pediatric_age', "centre",
@@ -77,15 +79,15 @@ def preprocess(merged_df):
     time_windows = [(-913, -730), (-730, -549), (-549, -365), (-365, -183),
                     (-913, 0), (-730, 0), (-549, 0), (-365, 0), (-183, 0)]
 
-    merged_df = create_tw_features(merged_df, "edss_as_evaluated_by_clinician", "delta_edss_time0", available_functions,
-                                   time_windows, drop_original=True)
+    merged_df = create_time_window_features(merged_df, "edss_as_evaluated_by_clinician", "delta_edss_time0", available_functions,
+                                            time_windows, drop_original=True)
 
     # time_windows = [(-1095, -730), (-730, -549), (-549, -365), (-365, -183),  (-182, 0)]
     merged_df = preprocess_evoked_potentials(merged_df, ['altered_potential', 'potential_value', 'location'],
                                              'delta_evoked_potential_time0', time_windows, drop_original=True)
     # # TODO interpolate over edss fillings
-    merged_df = create_tw_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
-                                   available_functions, time_windows, drop_original=True)
+    merged_df = create_time_window_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
+                                            available_functions, time_windows, drop_original=True)
 
     # merged_df = preprocess_mri(merged_df,
     #                            ['mri_area_label',
@@ -128,7 +130,7 @@ def preprocess(merged_df):
     return merged_df
 
 
-def fastai_fill_split_xy(df, seed):
+def fastai_fill_split_xy(df: pd.DataFrame, seed: int):
     splits = RandomSplitter(valid_pct=0.0, seed=seed)(range_of(df))
     cat_names, cont_names = fastai_ccnames(df)
 
@@ -136,7 +138,7 @@ def fastai_fill_split_xy(df, seed):
     return X, y, y_struct
 
 
-def fastai_ccnames(df):
+def fastai_ccnames(df: pd.DataFrame) -> tuple[list[str], list[str]]:
     # TODO add option to add outcome_time/outcome_occurred_depending on the preceding calculation
 
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
@@ -158,7 +160,7 @@ def fastai_ccnames(df):
     return cat_names, cont_names
 
 
-def fastai_tab(df, cat_names, cont_names, splits):
+def fastai_tab(df: pd.DataFrame, cat_names: list[str], cont_names: list[str], splits: tuple[list[int], list[int]]):
     to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
                        cat_names=cat_names,
                        cont_names=cont_names,
@@ -175,67 +177,12 @@ def fastai_tab(df, cat_names, cont_names, splits):
     return X_train, y_train_df, y_train_struct, X_valid, y_valid_df, y_valid_struct
 
 
-def y_to_struct_array(y, dtype):
+def y_to_struct_array(y: pd.DataFrame, dtype: list[tuple]) -> np.array:
     y = np.array([(bool(outcome_occurred), outcome_time) for outcome_occurred, outcome_time in zip(y.iloc[:, 0], y.iloc[:, 1])],dtype=dtype)
     return y
 
 
-def fill_missing_edss(df, feature, specific_names, drop_na_all=True):
-
-    def func(row):
-        mean_value = np.nanmean(row)
-        flag_first_value = True
-        for i, value in enumerate(row):
-            if np.isnan(value):
-                if flag_first_value:
-                    row[i] = 0
-                else:
-                    row[i] = mean_value
-            else:
-                flag_first_value = False
-        return row
-
-    feature_cols = select_same_feature_col_names(df, feature)
-    if drop_na_all:
-        df = df[~df[feature_cols].isna().all(axis=1)].copy()
-    for specific_name in specific_names:
-        func_win_cols = [feat for feat in feature_cols if specific_name in feat]
-        fill_value = 0  #df[func_win_cols].mean(axis=1, skipna=True)
-
-        # func(df[func_win_cols])
-
-        df[func_win_cols] = df[func_win_cols].apply(func, axis=1)
-
-
-        # df[func_win_cols] = df[func_win_cols].T.fillna(fill_value).T
-
-    # if drop_na_all:
-    #     df = df[~df[feature_cols].isna().any(axis=1)]  # Drop rows where at least 1 value was nan
-    return df
-
-
-def collapse_cols_as_occurrence_sum(df, feats_to_be_collapsed):
-    def collapse_ts_feature_cols(df, feature, start_idx, end_idx=None):
-        selected_cols = [col_name for col_name in df.columns.values.tolist() if
-                         col_name.startswith(feature) and col_name[-2:].isdigit()]
-        if end_idx:
-            cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:] < end_idx))]
-            new_feat_name = f"{feature}_{start_idx}-{end_idx}"
-        else:
-            cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:]))]
-            new_feat_name = f"{feature}_{start_idx}+"
-
-        df[new_feat_name] = ~df[cols_to_collapse].isna().all(axis=1)
-        df[new_feat_name] = df[new_feat_name].astype(np.int64)
-        df = df.drop(cols_to_collapse, axis=1)
-        return df
-
-    for feat in feats_to_be_collapsed:
-        df = collapse_ts_feature_cols(df, *feat)
-    return df
-
-
-def select_same_feature_col_names(df, feature) -> list:
+def select_same_feature_col_names(df: pd.DataFrame, feature: str) -> list[str]:
     return [col_name for col_name in df.columns.values.tolist() if col_name.startswith(feature)]
 
 
@@ -244,7 +191,7 @@ def select_same_feature_col_names_specific(df, feature) -> list:
             if col_name.startswith(feature) and col_name[len(feature)+1:len(feature)+3].isdigit()]
 
 
-def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
+def df_one_hot_encode(original_dataframe: pd.DataFrame, feature_to_encode: str, drop_org: bool = False) -> pd.DataFrame:
     dummies = pd.get_dummies(original_dataframe[[feature_to_encode]]).astype(dtype=np.int32)
     res = pd.concat([original_dataframe, dummies], axis=1)
     if drop_org:
@@ -252,7 +199,14 @@ def df_one_hot_encode(original_dataframe, feature_to_encode, drop_org=False):
     return res
 
 
-def create_tw_features(df, feature, time_feature, functions, time_windows, drop_original=False):
+def create_time_window_features(
+        df: pd.DataFrame,
+        feature: str,
+        time_feature: str,
+        functions: dict[str, Callable],
+        time_windows: list[tuple[int, int]],
+        drop_original: bool = False
+) -> pd.DataFrame:
     feature_cols = select_same_feature_col_names(df, feature)
     time_cols = select_same_feature_col_names(df, time_feature)
 
@@ -274,7 +228,13 @@ def create_tw_features(df, feature, time_feature, functions, time_windows, drop_
     return output_df
 
 
-def select_time_window_values(df, feature_cols, time_feature_cols, start_time=0, end_time=0):
+def select_time_window_values(
+        df: pd.DataFrame,
+        feature_cols: list[str],
+        time_feature_cols: list[str],
+        start_time: int = 0,
+        end_time: int = 0
+) -> np.ndarray:
     feature_matrix = df[feature_cols].to_numpy()
     time_values_matrix = df[time_feature_cols].to_numpy()
 
@@ -285,7 +245,13 @@ def select_time_window_values(df, feature_cols, time_feature_cols, start_time=0,
     return selected_values
 
 
-def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, drop_original=False):
+def preprocess_evoked_potentials(
+        df: pd.DataFrame,
+        feature_names: list[str],
+        time_feature: str,
+        time_windows: list[tuple[int, int]],
+        drop_original=False
+) -> pd.DataFrame:
     features_cols = {feature: select_same_feature_col_names(df, feature) for feature in feature_names}
 
     time_cols = select_same_feature_col_names(df, time_feature)
@@ -354,7 +320,15 @@ def preprocess_evoked_potentials(df, feature_names, time_feature, time_windows, 
 """
 
 
-def preprocess_mri(df, feature_names, time_feature, time_windows, functions, drop_original=False):
+def preprocess_mri(
+        df: pd.DataFrame,
+        feature_names: list[str],
+        time_feature: str,
+        time_windows: list[tuple[int, int]],
+        functions: dict[str, Callable],
+        drop_original: bool = False
+) -> pd.DataFrame:
+    """ Not called """
     features_cols = {feature: select_same_feature_col_names_specific(df, feature) for feature in feature_names}
 
     time_cols = select_same_feature_col_names(df, time_feature)
@@ -422,3 +396,60 @@ def preprocess_mri(df, feature_names, time_feature, time_windows, functions, dro
             [*[f_name for feature_cols in features_cols.values() for f_name in list(feature_cols)], *time_cols], axis=1)
 
     return output_df
+
+
+def fill_missing_edss(df: pd.DataFrame, feature, specific_names, drop_na_all=True):
+    """ Not called """
+
+    def func(row):
+        mean_value = np.nanmean(row)
+        flag_first_value = True
+        for i, value in enumerate(row):
+            if np.isnan(value):
+                if flag_first_value:
+                    row[i] = 0
+                else:
+                    row[i] = mean_value
+            else:
+                flag_first_value = False
+        return row
+
+    feature_cols = select_same_feature_col_names(df, feature)
+    if drop_na_all:
+        df = df[~df[feature_cols].isna().all(axis=1)].copy()
+    for specific_name in specific_names:
+        func_win_cols = [feat for feat in feature_cols if specific_name in feat]
+        fill_value = 0  #df[func_win_cols].mean(axis=1, skipna=True)
+
+        # func(df[func_win_cols])
+
+        df[func_win_cols] = df[func_win_cols].apply(func, axis=1)
+
+
+        # df[func_win_cols] = df[func_win_cols].T.fillna(fill_value).T
+
+    # if drop_na_all:
+    #     df = df[~df[feature_cols].isna().any(axis=1)]  # Drop rows where at least 1 value was nan
+    return df
+
+
+def collapse_cols_as_occurrence_sum(df, feats_to_be_collapsed):
+    """ Not called """
+    def collapse_ts_feature_cols(df, feature, start_idx, end_idx=None):
+        selected_cols = [col_name for col_name in df.columns.values.tolist() if
+                         col_name.startswith(feature) and col_name[-2:].isdigit()]
+        if end_idx:
+            cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:] < end_idx))]
+            new_feat_name = f"{feature}_{start_idx}-{end_idx}"
+        else:
+            cols_to_collapse = [col for col in selected_cols if (start_idx <= int(col[-2:]))]
+            new_feat_name = f"{feature}_{start_idx}+"
+
+        df[new_feat_name] = ~df[cols_to_collapse].isna().all(axis=1)
+        df[new_feat_name] = df[new_feat_name].astype(np.int64)
+        df = df.drop(cols_to_collapse, axis=1)
+        return df
+
+    for feat in feats_to_be_collapsed:
+        df = collapse_ts_feature_cols(df, *feat)
+    return df

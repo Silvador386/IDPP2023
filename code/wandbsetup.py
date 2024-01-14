@@ -69,7 +69,8 @@ surftrace_sweep_params = {'batch_size': {"min": 48, "max": 128},
                           'attention_probs_dropout_prob': {"min": 0.1, "max": 0.3},
                           }
 
-def launch_sweep(project, notes, config):
+
+def launch_sweep(project: str, notes: str, config: dict) -> str:
     sweep_configuration[notes] = notes
     sweep_configuration.update(config)
     sweep_configuration["parameters"] = surftrace_sweep_params

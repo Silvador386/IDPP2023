@@ -2,12 +2,12 @@ import numpy as np
 from scipy.stats import mode
 
 
-def count_not_nan(array):
+def count_not_nan(array: np.array) -> int:
     not_nan_value_sum = np.sum(~np.isnan(array))
     return not_nan_value_sum
 
 
-def mode_wrapper(array):
+def mode_wrapper(array: np.array):
     if np.isnan(array).all():
         return np.nan
     else:

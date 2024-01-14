@@ -1,4 +1,7 @@
-def fastai_ccnames_original(df):
+import pandas as pd
+
+
+def fastai_ccnames_original(df: pd.DataFrame) -> tuple[list[str], list[str]]:
     col_value_types = {"bool": ['ms_in_pediatric_age', 'spinal_cord_symptom', 'brainstem_symptom', 'eye_symptom',
                                 'supratentorial_symptom'],
                        "int32": ['new_or_enlarged_lesions_T2_5+', 'number_of_new_or_enlarged_lesions_T2_5+',

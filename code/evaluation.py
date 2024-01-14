@@ -9,7 +9,7 @@ from sksurv.linear_model import CoxPHSurvivalAnalysis
 from sklearn.model_selection import train_test_split
 
 
-def evaluate_c(model, X, y=None):
+def evaluate_c(model, X: pd.DataFrame, y: list = None) -> tuple[float, np.array]:
     prediction_scores = model.predict(X)
     prediction_scores = resize_pred_scores_by_order(prediction_scores)
 
