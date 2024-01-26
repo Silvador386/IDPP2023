@@ -19,7 +19,7 @@ def load_data(config, X, y_df, train_idx=None, val_idx=None):
 
     if data == "idpp":
         # data processing, transform all continuous data to discrete
-        cols_categorical, cols_standardize = fastai_ccnames(X)  # Works weirdly,
+        cols_categorical, cols_standardize = fastai_ccnames(X, target_names=["outcome_occurred", "outcome_time"])  # Works weirdly,
         df = pd.concat([X, y_df], axis=1).reset_index(drop=True)
         df[cols_categorical] = df[cols_categorical].astype(np.int32)  # default int8 overflows
         df.rename(columns={"outcome_occurred": "event", "outcome_time": "duration"}, inplace=True)

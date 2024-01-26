@@ -5,8 +5,8 @@ import random
 import matplotlib.pyplot as plt
 
 from ioutils import load_dfs_from_files_in_dir, save_predictions, load_df_from_file, filenames_in_folder
-from merge_dfs import merge_dfs, merge_train_test_dataframes
-from preprocessing import preprocess, fastai_fill_split_xy, y_to_struct_array
+from dataset import IDDPDataset
+from preprocessing import preprocess, fastai_preproccess_dataset, y_to_struct_array
 from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
 from survEstimators import init_surv_estimators, SurvTraceWrap, AvgEnsemble
 from sklearn.model_selection import ShuffleSplit
@@ -19,75 +19,45 @@ set_config(display="text")  # displays text representation of estimators
 
 class IDPPPipeline:
     OUTPUT_DIR = "../out"
-    num_iter = 10
-    train_size = 0.8
-    n_estimators = 100
 
     def __init__(
             self,
-            dataset_dir_path: str,
-            dataset_name: str,
-            id_feature_name: str,
-            seed: int
+            config: dict
     ):
-        self.dataset_dir = dataset_dir_path
-        self.dataset_name = dataset_name
-        self.id_feature_name = id_feature_name
-        self.seed = seed
+        self.config = config
 
+        self.dataset_name = config.get("dataset_name")
+        self.id_feature_name = config.get("id_feature_name")
+        self.seed = config.get("seed", 777)
+        self.num_iter = config.get("num_iter", 10)
+        self.train_size = config.get("train_size", 0.8)
+        self.n_estimators = config.get("n_estimators", 100)
 
-        self.dataset_dirs = [f"../data/{dataset_name}_train", f"../data/{dataset_name}_test"]
-        # dataset_dirs = [f"../data/datasetA_train", f"../data/datasetA_train_test",
-        #                 f"../data/datasetB_train", f"../data/datasetB_train_test"]
+        self.dataset = None
+        self.estimators = None
 
-        multiple_merge_dfs = []
-        for data_dir, dataset_type in zip(self.dataset_dirs, ["train", "test", ]):
-            dfs = load_dfs_from_files_in_dir(data_dir)
-            multiple_merge_dfs.append(merge_dfs(dfs, self.dataset_name, self.id_feature_name, dataset_type))
+    def setup(self):
+        dataset_dirs = [f"../data/{self.dataset_name}_train", f"../data/{self.dataset_name}_test"]
 
-        self.train_ids, self.test_ids, self.merged_df = merge_train_test_dataframes(multiple_merge_dfs, self.id_feature_name)
+        self.dataset = IDDPDataset(self.dataset_name, self.id_feature_name, self.seed)
+        self.dataset.load_data(*dataset_dirs)
 
-        self.merged_df = preprocess(self.merged_df)
+        X, y, y_struct = self.dataset.get_train_data()
+        # self.X_test, self.y_test = self.dataset.get_test_data()
 
-        self.X, self.y, _ = fastai_fill_split_xy(self.merged_df, self.seed)
-
-        self.X_test, self.y_test = self.X.loc[self.test_ids], self.y.loc[self.test_ids]
-
-
-        self.X, self.y = self.X.loc[self.train_ids], self.y.loc[self.train_ids]
-        self.y_struct = y_to_struct_array(self.y, dtype=[('outcome_occurred', '?'), ('outcome_time', '<f8')])
-
-        self.estimators = init_surv_estimators(self.seed, self.X, self.y, self.n_estimators)
+        self.estimators = init_surv_estimators(self.seed, X, y, self.n_estimators)
 
         self.team_shortcut_t1 = "uwb_T1{}_{}"
         self.team_shortcut_t2 = "uwb_T2{}_{}"
 
-        self.project = f"IDPP-CLEF-{dataset_name[-1]}{'_V3' if self.dataset_name == 'datasetA' else ''}"
-        self.config = {"column_names": list(self.X.columns.values),
-                       "X_shape": self.X.shape,
-                       "num_iter": self.num_iter,
-                       "train_size": self.train_size,
-                       "seed": self.seed,
-                       # "n_estimators": self.n_estimators
-                       }
-
-        self.notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avg"
-
-    def setup(self, ):
-        pass
-
-    def prepare_dataset(self, dataset):
-        pass
-
-    def get_models(self):
-        pass
-
     def run(self):
+        self.setup()
+        X, y, y_struct = self.dataset.get_train_data()
         best_accs, avg_acc, best_est = [], [], []
         for name, models in self.estimators.items():
-            # self.wandb_run = setup_wandb(project=self.project, config=self.config, name=name, notes=self.notes)
+            # self.wandb_run = setup_wandb(self.config, name, self.dataset )
             print(f"Estimator: {name}")
-            train_c_scores, val_c_scores, best_acc, best_estimator = self.run_n_times(models, num_iter=self.num_iter)
+            train_c_scores, val_c_scores, best_acc, best_estimator = self.run_n_times(models, self.dataset, num_iter=self.num_iter)
             best_accs.append(best_acc)
             avg_acc.append(np.average(val_c_scores))
             best_est.append(best_estimator)
@@ -95,12 +65,12 @@ class IDPPPipeline:
             print(f"Val   ({self.num_iter}iter) c-score: {np.average(val_c_scores)} ({np.std(val_c_scores)})")
 
             if name == "CGBSA":
-                plot_coef_(best_estimator, self.X)
+                plot_coef_(best_estimator, X)
 
-            self.predict(best_estimator, self.X, self.y_struct, save=False)
+            self.predict(best_estimator, X, y_struct, save=False)
 
             if name != "SurvTRACE":
-                self.predict_cumulative(best_estimator, self.X, (self.y_struct, self.y_struct), save=False)
+                self.predict_cumulative(best_estimator, X, y_struct, save=False)
 
             # if name == "SurvTRACE_cumulative":
             #     self.predict_cumulative(best_estimator, self.X_test, save=True)
@@ -116,7 +86,7 @@ class IDPPPipeline:
         self.team_shortcut_t1 = self.team_shortcut_t1.format(self.dataset_name[-1].lower(), best_est_name)
         self.team_shortcut_t2 = self.team_shortcut_t2.format(self.dataset_name[-1].lower(), best_est_name)
 
-        self.predict(best_estimator, self.X, self.y_struct, save=False)
+        self.predict(best_estimator, X, y_struct, save=False)
         # self.predict(best_estimator, self.X_test, save=True)
 
         # if best_est_name != "SurvTRACE":
@@ -124,16 +94,17 @@ class IDPPPipeline:
         #     self.predict_cumulative(best_estimator, self.X_test, save=True)
 
         ensemble = AvgEnsemble(best_est)
-        self.wandb_run = setup_wandb(project=self.project, config=self.config, name="EnsembleAvg", notes=self.notes)
-        self.run_n_times(ensemble, 100)
-        self.predict(ensemble, self.X, self.y_struct, save=False)
-        self.predict(ensemble, self.X_test, save=True)
+        self.wandb_run = setup_wandb(self.config, model_name="EnsembleAvg", dataset=self.dataset)
+        self.run_n_times(ensemble, self.dataset, 100)
+        self.predict(ensemble, X, y_struct, save=False)
+        # self.predict(ensemble, self.X_test, save=True)
         # self.predict_cumulative(ensemble, self.X, (self.y_struct, self.y_struct), save=False)
         # self.predict_cumulative(ensemble, self.X_test, save=True)
         self.wandb_run.finish()
 
-    def run_model(self, model, random_state: int) -> tuple[list, list, list]:
-        X, y_struct, y_df = self.X, self.y_struct, self.y
+    def run_model(self, model, dataset: IDDPDataset, random_state: int) -> tuple[list, list, list]:
+
+        X, y_df, y_struct = dataset.get_train_data()
         avg_scores = {"train": [], "test": [], "model": []}
         # gss = GroupShuffleSplit(n_splits=10, train_size=self.train_size)
         # group_kfold = GroupKFold(n_splits=2)
@@ -157,13 +128,13 @@ class IDPPPipeline:
 
         return avg_scores["train"], avg_scores["test"], avg_scores["model"]
 
-    def run_n_times(self, model, num_iter: int = 5) -> tuple:
+    def run_n_times(self, model, dataset: IDDPDataset, num_iter: int = 5) -> tuple:
         train_c_scores, val_c_scores, fitted_models = [], [], []
         for i in range(num_iter):
             error_flag = True
             while error_flag:
                 try:
-                    train_c_score, val_c_score, fitted_model = self.run_model(model, random_state=random.randint(0, 2**10))
+                    train_c_score, val_c_score, fitted_model = self.run_model(model, dataset, random_state=random.randint(0, 2**10))
                     train_c_scores += train_c_score
                     val_c_scores += val_c_score
                     fitted_models += fitted_model
@@ -185,6 +156,7 @@ class IDPPPipeline:
         return np.array(train_c_scores), np.array(val_c_scores), best_acc, best_estimator
 
     def predict(self, best_model, X: pd.DataFrame, y: list = None, save: bool = False) -> pd.DataFrame:
+
         c_score, predictions = evaluate_c(best_model, X, y)
 
         pred_output = {self.id_feature_name: X.index,
@@ -493,11 +465,15 @@ def main():
 
     seed_basic(DEFAULT_RANDOM_SEED)
 
-    DATASET = "datasetA"
-    DATASET_DIR = f"../data/{DATASET}_train"
-    ID_FEAT = "patient_id"
+    config = {
+        "dataset_name": "datasetA",
+        "id_feature_name": "patient_id",
+        "num_iter": 100,
+        "train_size": 0.8,
+        "seed": DEFAULT_RANDOM_SEED,
+    }
 
-    pipeline = IDPPPipeline(DATASET_DIR, DATASET, ID_FEAT, DEFAULT_RANDOM_SEED)
+    pipeline = IDPPPipeline(config)
     # pipeline.plot_submission_results()
     pipeline.run()
     # pipeline.param_sweep()

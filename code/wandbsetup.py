@@ -1,14 +1,21 @@
 import wandb
+from dataset import IDDPDataset
 
-
-def setup_wandb(project, config, name=None, notes=None, *kwargs):
+def setup_wandb(config: dict, model_name: str, dataset: IDDPDataset, *kwargs):
     wandb.login()
-    config["model"] = name
+
+    dataset_name = dataset.dataset_name
+
+    project = f"IDPP-CLEF-{dataset_name[-1]}{'_V3' if dataset_name == 'datasetA' else ''}"
+
+    notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avg"
+
+    config["model"] = model_name
     run = wandb.init(
         project=project,
         config=config,
         reinit=True,
-        name=name,
+        name=model_name,
         notes=notes
     )
 

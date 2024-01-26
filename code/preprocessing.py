@@ -130,15 +130,19 @@ def preprocess(merged_df: pd.DataFrame) -> pd.DataFrame:
     return merged_df
 
 
-def fastai_fill_split_xy(df: pd.DataFrame, seed: int):
+def fastai_preproccess_dataset(
+        df: pd.DataFrame,
+        target_names: list[str],
+        seed: int
+):
     splits = RandomSplitter(valid_pct=0.0, seed=seed)(range_of(df))
-    cat_names, cont_names = fastai_ccnames(df)
+    cat_names, cont_names = fastai_ccnames(df, target_names=target_names)
 
-    X, y, y_struct, _, __, ___ = fastai_tab(df, cat_names, cont_names, splits)
-    return X, y, y_struct
+    X, y, _, __ = fastai_tabular(df, cat_names, cont_names, target_names, splits)
+    return X, y
 
 
-def fastai_ccnames(df: pd.DataFrame) -> tuple[list[str], list[str]]:
+def fastai_ccnames(df: pd.DataFrame, target_names: list[str]) -> tuple[list[str], list[str]]:
     # TODO add option to add outcome_time/outcome_occurred_depending on the preceding calculation
 
     col_value_types = df.columns.to_series().groupby(df.dtypes).groups
@@ -152,29 +156,30 @@ def fastai_ccnames(df: pd.DataFrame) -> tuple[list[str], list[str]]:
         else:
             cont_names += col_value_types[type_name].to_list()
 
-    if "outcome_occurred" in cont_names:
-        cont_names.remove("outcome_occurred")
-    if "outcome_time" in cont_names:
-        cont_names.remove("outcome_time")
+    for target_name in target_names:
+        if target_name in cont_names:
+            cont_names.remove(target_name)
 
     return cat_names, cont_names
 
 
-def fastai_tab(df: pd.DataFrame, cat_names: list[str], cont_names: list[str], splits: tuple[list[int], list[int]]):
+def fastai_tabular(
+        df: pd.DataFrame,
+        cat_names: list[str],
+        cont_names: list[str],
+        y_names: list[str],
+        splits: tuple[list[int], list[int]]
+):
     to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
                        cat_names=cat_names,
                        cont_names=cont_names,
-                       y_names=["outcome_occurred", "outcome_time"],
+                       y_names=y_names,
                        splits=splits)
 
     X_train, y_train_df = to.train.xs, to.train.ys
     X_valid, y_valid_df = to.valid.xs, to.valid.ys
 
-    struct_dtype = [('outcome_occurred', '?'), ('outcome_time', '<f8')]
-    y_train_struct = y_to_struct_array(y_train_df, dtype=struct_dtype)
-    y_valid_struct = y_to_struct_array(y_valid_df, dtype=struct_dtype)
-
-    return X_train, y_train_df, y_train_struct, X_valid, y_valid_df, y_valid_struct
+    return X_train, y_train_df, X_valid, y_valid_df
 
 
 def y_to_struct_array(y: pd.DataFrame, dtype: list[tuple]) -> np.array:
