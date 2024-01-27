@@ -6,7 +6,9 @@ def setup_wandb(config: dict, model_name: str, dataset: IDDPDataset, *kwargs):
 
     dataset_name = dataset.dataset_name
 
-    project = f"IDPP-CLEF-{dataset_name[-1]}{'_V3' if dataset_name == 'datasetA' else ''}"
+    tags = [f"{dataset_name}", f"{model_name}"]
+
+    project = f"IDPP-2024"
 
     notes = "(stat_vars[onehot])_(edss)_(delta_relapse_time0[funcs])_(evoked_potential[type][twosum])_final_avg"
 
@@ -16,10 +18,15 @@ def setup_wandb(config: dict, model_name: str, dataset: IDDPDataset, *kwargs):
         config=config,
         reinit=True,
         name=model_name,
+        tags=tags,
         notes=notes
     )
 
     return run
+
+
+def get_run_name(config: dict, model_name: str, dataset: IDDPDataset, *kwargs):
+    return f"{model_name}_{dataset.dataset_name}"
 
 
 sweep_configuration = {

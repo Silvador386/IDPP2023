@@ -29,7 +29,7 @@ def wrap_c_scorer(estimator, X_test, y_test):
     return evaluate_c(estimator, X_test, y_test)[0]
 
 
-def evaluate_cumulative(model, X, y=None, time_points=None, plot=False):
+def evaluate_cumulative(model, X, y_struct_train, y_struct_test, time_points=None, plot=False):
     if time_points is None:
         time_points = [2, 4, 6, 8, 10]
 
@@ -56,7 +56,7 @@ def evaluate_cumulative(model, X, y=None, time_points=None, plot=False):
     predictions = resize_pred_scores_by_order(predictions)
 
     if y is not None:
-        auc_scores = cumulative_dynamic_auc(y[0], y[1], predictions, time_points)
+        auc_scores = cumulative_dynamic_auc(y_struct_train, y_struct_test, predictions, time_points)
     else:
         auc_scores = None
     return auc_scores, predictions

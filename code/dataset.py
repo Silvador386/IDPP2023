@@ -23,7 +23,7 @@ class IDDPDataset:
         self.seed = seed
 
         self.X, self.y, self.y_struct = None, None, None
-        self.X_test, self.y_test = None, None
+        self.X_test, self.y_test, self.y_test_struct = None, None, None
 
     def load_data(self, train_dir_path: str, test_dir_path: str = None):
 
@@ -47,12 +47,13 @@ class IDDPDataset:
 
         if test_dir_path:
             self.X_test, self.y_test = data_X.loc[test_ids], data_y.loc[test_ids]
+            self.y_test_struct = y_to_struct_array(self.y_test, dtype=self.TARGET_STRUCT_PATTERN)
 
     def get_train_data(self) -> tuple[pd.DataFrame, pd.DataFrame, np.array]:
         return self.X, self.y, self.y_struct
 
-    def get_test_data(self) -> tuple[pd.DataFrame, pd.DataFrame]:
-        return self.X_test, self.y_test
+    def get_test_data(self) -> tuple[pd.DataFrame, pd.DataFrame, np.array]:
+        return self.X_test, self.y_test, self.y_test_struct
 
     def get_feature_names(self) -> list:
         if self.X is not None:
