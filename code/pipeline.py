@@ -8,7 +8,8 @@ import tqdm
 from ioutils import load_dfs_from_files_in_dir, save_predictions, load_df_from_file, filenames_in_folder
 from dataset import IDDPDataset
 from preprocessing import preprocess, fastai_preproccess_dataset, y_to_struct_array
-from evaluation import evaluate_c, evaluate_cumulative, plot_coef_, wrap_c_scorer
+from evaluation import get_c_score, evaluate_cumulative_c_score, plot_coef_, wrap_c_scorer, \
+    resize_pred_scores_by_order
 from survEstimators import init_surv_estimators, SurvTraceWrap, AvgEnsemble
 from sklearn.model_selection import ShuffleSplit
 from wandbsetup import setup_wandb, launch_sweep
@@ -49,9 +50,6 @@ class IDPPPipeline:
 
         self.estimators = init_surv_estimators(self.seed, X, y, self.n_estimators)
 
-        self.team_shortcut_t1 = f"uwb_T1{self.dataset_name[-1].lower()}_"
-        self.team_shortcut_t2 = f"uwb_T2{self.dataset_name[-1].lower()}_"
-
     def run(self):
         self.setup()
         X, y, y_struct = self.dataset.get_train_data()
@@ -69,31 +67,19 @@ class IDPPPipeline:
             if name == "CGBSA":
                 plot_coef_(best_estimator, X)
 
-            self.predict(best_estimator, X_test, y_test_struct, save=False)
-
             if name != "SurvTRACE":
-                self.predict_cumulative(best_estimator, X_test, y_test_struct, save=False)
+                self.predict_cumulative(best_estimator, X_test, y_struct, y_test_struct)
 
         best_estimator_index = np.array(avg_acc).argmax()
         best_estimator = best_estimators[best_estimator_index]
-        self.predict(best_estimator, X_test, y_test_struct, save=False)
-        best_est_name = list(self.estimators.keys())[best_estimator_index]
-
-        best_est_name = "AvgEnsemble"
-
-        self.team_shortcut_t1 = f"uwb_T1{self.dataset_name[-1].lower()}_{best_est_name}"
-        self.team_shortcut_t2 = f"uwb_T2{self.dataset_name[-1].lower()}_{best_est_name}"
+        self.predict_and_get_c_score(best_estimator, X_test, y_test_struct)
 
         self.run_ensemble(best_estimators)
 
     def run_ensemble(self, estimator_models):
         ensemble = AvgEnsemble(estimator_models)
-        self.wandb_run = setup_wandb(self.config, model_name="EnsembleAvg", dataset=self.dataset)
         self.run_folds(ensemble, self.dataset, 100)
 
-        X, y, y_struct = self.dataset.get_test_data()
-        self.predict(ensemble, X, y_struct, save=False)
-        self.wandb_run.finish()
 
     def run_folds(self, model, dataset: IDDPDataset, iterations: int = 5) -> tuple:
         train_c_scores, val_c_scores, fitted_models = [], [], []
@@ -109,9 +95,10 @@ class IDPPPipeline:
 
                     wandb_run.log(
                         {
-                            f"Iteration": i + 1,
                             f"Train C-Score": train_c_score,
                             f"Val C-Score": val_c_score,
+                            f"Avg. Train C-Score": np.average(train_c_scores),
+                            f"Avg. Val C-Score": np.average(val_c_scores),
                         }
                     )
                     break
@@ -119,9 +106,18 @@ class IDPPPipeline:
                 except ValueError as e:
                     print(f"Error: {e}")
 
+        best_acc, best_estimator = (np.max(np.array(val_c_scores)), fitted_models[np.array(val_c_scores).argmax()])
+        if dataset.has_test_data():
+            X_test, y_test, y_test_struct = dataset.get_test_data()
+            test_c_score, prediction_scores = self.predict_and_get_c_score(best_estimator, X_test, y_test_struct)
+            wandb_run.log(
+                {
+                    f"Test C-Score": test_c_score
+                }
+            )
+
         wandb_run.finish()
 
-        best_acc, best_estimator = (np.max(np.array(val_c_scores)), fitted_models[np.array(val_c_scores).argmax()])
         return np.array(train_c_scores), np.array(val_c_scores), best_acc, best_estimator
 
     def run_random_split(self, model, dataset: IDDPDataset, random_state: int) -> tuple:
@@ -138,45 +134,63 @@ class IDPPPipeline:
                 model, train_c_score, val_c_score = model.fit(X, y_df, train_idx, test_idx)
             else:
                 model.fit(X_train, y_train)
-                train_c_score, _ = evaluate_c(model, X_train, y_train)
-                val_c_score, _ = evaluate_c(model, X_valid, y_valid)
+                train_c_score, _ = self.predict_and_get_c_score(model, X_train, y_train)
+                val_c_score, _ = self.predict_and_get_c_score(model, X_valid, y_valid)
 
         return model, train_c_score, val_c_score
 
-    def predict(self, best_model, X: pd.DataFrame, y: list = None, save: bool = False) -> pd.DataFrame:
+    def predict_and_get_c_score(
+            self,
+            model,
+            X: pd.DataFrame,
+            y: list
+    ) -> tuple[float, pd.DataFrame]:
+        prediction_scores = self.predict(model, X)
+        c_score = get_c_score(prediction_scores, y)
 
-        c_score, predictions = evaluate_c(best_model, X, y)
-
-        pred_output = {self.id_feature_name: X.index,
-                       "predictions": predictions,
-                       "run": self.team_shortcut_t1}
-
-        print(best_model.__class__.__name__)
-        print(f"Predictions C-Index Resized:", c_score)
+        pred_output = {
+            self.id_feature_name: X.index,
+            "predictions": prediction_scores,
+            "run": f"uwb_T1{self.dataset_name[-1]}_{model.__class__.__name__}"
+        }
         pred_df = pd.DataFrame(pred_output)
+        return c_score, pred_df
 
-        if save:
-            save_predictions(self.OUTPUT_DIR, f"{self.team_shortcut_t1}.txt", pred_df)
-        return pred_df
+    @staticmethod
+    def predict(model, X: pd.DataFrame) -> np.array:
+        prediction_scores = model.predict(X)
+        prediction_scores = resize_pred_scores_by_order(prediction_scores)
+        return prediction_scores
 
-    def predict_cumulative(self, best_model, X: pd.DataFrame, y: list = None, save: bool = False) -> pd.DataFrame:
+    def predict_cumulative(
+            self,
+            model,
+            X: pd.DataFrame,
+            y_struct_train: list = None,
+            y_struct_test: list = None,
+    ) -> tuple[float, pd.DataFrame]:
         time_points = [2, 4, 6, 8, 10]
-        auc_scores, predictions = evaluate_cumulative(best_model, X, y, time_points=time_points,
-                                                      plot=True)
+        auc_scores, predictions = evaluate_cumulative_c_score(
+            model,
+            X,
+            y_struct_train=y_struct_train,
+            y_struct_test=y_struct_test,
+            time_points=time_points,
+            plot=True
+        )
 
-        pred_output = {self.id_feature_name: X.index,
-                       "2years": predictions[:, 0],
-                       "4years": predictions[:, 1],
-                       "6years": predictions[:, 2],
-                       "8years": predictions[:, 3],
-                       "10years": predictions[:, 4],
-                       "run": self.team_shortcut_t2}
-        print("AUC Scores whole", auc_scores)
+        pred_output = {
+            self.id_feature_name: X.index,
+            "2years": predictions[:, 0],
+            "4years": predictions[:, 1],
+            "6years": predictions[:, 2],
+            "8years": predictions[:, 3],
+            "10years": predictions[:, 4],
+            "run": f"uwb_T2{self.dataset_name[-1]}_{model.__class__.__name__}"
+        }
         pred_df = pd.DataFrame(pred_output)
-        if save:
-            save_predictions(self.OUTPUT_DIR, f"{self.team_shortcut_t2}.txt", pred_df)
 
-        return pred_df
+        return auc_scores, pred_df
 
     def param_sweep(self):
         sweep_id = launch_sweep(self.project, self.notes, self.config)
@@ -191,7 +205,7 @@ class IDPPPipeline:
                        f"Val C-Score": val_c_score[0],
                        })
 
-    def run_ensemble(self):
+    def _run_ensemble(self):
         from sksurv.meta import EnsembleSelectionRegressor, Stacking
 
         model = EnsembleSelectionRegressor([(name, est) for name, est in self.estimators.items()], scorer=wrap_c_scorer,
@@ -235,6 +249,9 @@ def main():
         "num_iter": 1,
         "train_size": 0.8,
         "seed": DEFAULT_RANDOM_SEED,
+
+        "wandb_entity": "mrhanzl",
+        "wandb_project": "IDPP-2024",
     }
 
     pipeline = IDPPPipeline(config)

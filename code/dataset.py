@@ -52,6 +52,9 @@ class IDDPDataset:
     def get_train_data(self) -> tuple[pd.DataFrame, pd.DataFrame, np.array]:
         return self.X, self.y, self.y_struct
 
+    def has_test_data(self) -> bool:
+        return self.X_test is not None and self.y_test_struct is not None
+
     def get_test_data(self) -> tuple[pd.DataFrame, pd.DataFrame, np.array]:
         return self.X_test, self.y_test, self.y_test_struct
 

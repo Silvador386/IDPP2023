@@ -26,7 +26,6 @@ def load_dfs_from_files_in_dir(dir_path: str) -> dict[str, pd.DataFrame]:
     return dfs
 
 
-def save_predictions(dir_path: str, file_name: str, predictions: pd.DataFrame):
+def save_predictions(file_path: str, predictions: pd.DataFrame):
     """ Save predictions to a file """
-    file_path = osp.join(dir_path, file_name)
     predictions.to_csv(file_path, header=None, index=None, sep=' ', mode='w+')
