@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from ioutils import load_dfs_from_files_in_dir
+from utils.ioutils import load_dfs_from_files_in_dir
 from merge_dfs import merge_dfs
 from preprocessing import preprocess, fastai_preproccess_dataset, y_to_struct_array
 

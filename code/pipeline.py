@@ -4,10 +4,9 @@ import pandas as pd
 import random
 import matplotlib.pyplot as plt
 import tqdm
+from joblib import Parallel, delayed
 
-from ioutils import load_dfs_from_files_in_dir, save_predictions, load_df_from_file, filenames_in_folder
 from dataset import IDDPDataset
-from preprocessing import preprocess, fastai_preproccess_dataset, y_to_struct_array
 from evaluation import get_c_score, evaluate_cumulative_c_score, plot_coef_, wrap_c_scorer, \
     resize_pred_scores_by_order
 from survEstimators import init_surv_estimators, SurvTraceWrap, AvgEnsemble
@@ -57,7 +56,7 @@ class IDPPPipeline:
         best_accs, avg_acc, best_estimators = [], [], []
         for name, models in self.estimators.items():
             print(f"Estimator: {name}")
-            train_c_scores, val_c_scores, best_acc, best_estimator = self.run_folds(models, self.dataset, self.num_iter)
+            train_c_scores, val_c_scores, best_acc, best_estimator = self.run_folds_parallel(models, self.dataset, self.num_iter)
             best_accs.append(best_acc)
             avg_acc.append(np.average(val_c_scores))
             best_estimators.append(best_estimator)
@@ -78,9 +77,71 @@ class IDPPPipeline:
 
     def run_ensemble(self, estimator_models):
         ensemble = AvgEnsemble(estimator_models)
-        self.run_folds(ensemble, self.dataset, 100)
+        self.run_folds_parallel(ensemble, self.dataset, 100)
 
+    @staticmethod
+    def run_random_split_parallel(model, dataset: IDDPDataset, train_size: float, seed: int, count: int) -> tuple:
 
+        X, y_df, y_struct = dataset.get_train_data()
+
+        ss = ShuffleSplit(n_splits=1, train_size=train_size, random_state=seed)
+
+        for i, (train_idx, test_idx) in enumerate(ss.split(X, y_struct)):
+            X_train, y_train, X_valid, y_valid = X.iloc[train_idx], y_struct[train_idx], X.iloc[test_idx], y_struct[
+                test_idx]
+
+            if model.__class__.__name__ == "SurvTraceWrap":
+                model = SurvTraceWrap(seed, X, y_df, instance_order=count)
+                model, train_c_score, val_c_score = model.fit(X, y_df, train_idx, test_idx)
+            else:
+                model.fit(X_train, y_train)
+                prediction_scores = IDPPPipeline.predict(model, X_train)
+                train_c_score = get_c_score(prediction_scores, y_train)
+                prediction_scores = IDPPPipeline.predict(model, X_valid)
+                val_c_score = get_c_score(prediction_scores, y_valid)
+
+        return model, train_c_score, val_c_score
+
+    def run_folds_parallel(self, model, dataset: IDDPDataset, iterations: int = 5, n_jobs: int = 16):
+        train_c_scores, val_c_scores, fitted_models = [], [], []
+
+        wandb_run = setup_wandb(self.config, dataset=self.dataset, model_name=model.__class__.__name__)
+
+        results = (
+            Parallel(n_jobs=n_jobs)
+            (delayed(self.run_random_split_parallel)
+             (model, dataset, self.train_size, random.randint(0, 2 ** 10), count=i)
+             for i in range(iterations)
+             )
+        )
+
+        for fitted_model, train_c_score, val_c_score in results:
+            fitted_models.append(fitted_model)
+            train_c_scores.append(train_c_score)
+            val_c_scores.append(val_c_score)
+
+            wandb_run.log(
+                {
+                    f"Train C-Score": train_c_score,
+                    f"Val C-Score": val_c_score,
+                    f"Avg. Train C-Score": np.average(train_c_scores),
+                    f"Avg. Val C-Score": np.average(val_c_scores),
+                }
+            )
+
+        best_acc, best_estimator = (np.max(np.array(val_c_scores)), fitted_models[np.array(val_c_scores).argmax()])
+        if dataset.has_test_data():
+            X_test, y_test, y_test_struct = dataset.get_test_data()
+            test_c_score, prediction_scores = self.predict_and_get_c_score(best_estimator, X_test, y_test_struct)
+            wandb_run.log(
+                {
+                    f"Test C-Score": test_c_score
+                }
+            )
+
+        wandb_run.finish()
+
+        return np.array(train_c_scores), np.array(val_c_scores), best_acc, best_estimator
     def run_folds(self, model, dataset: IDDPDataset, iterations: int = 5) -> tuple:
         train_c_scores, val_c_scores, fitted_models = [], [], []
 
@@ -88,7 +149,7 @@ class IDPPPipeline:
         for i in tqdm.tqdm(range(iterations)):
             while True:
                 try:
-                    fitted_model, train_c_score, val_c_score = self.run_random_split(model, dataset, random_state=random.randint(0, 2 ** 10))
+                    fitted_model, train_c_score, val_c_score = IDPPPipeline.run_random_split_parallel(model, dataset, random_state=random.randint(0, 2 ** 10), train_size=self.train_size)
                     fitted_models.append(fitted_model)
                     train_c_scores.append(train_c_score)
                     val_c_scores.append(val_c_score)
@@ -246,7 +307,7 @@ def main():
     config = {
         "dataset_name": "datasetA",
         "id_feature_name": "patient_id",
-        "num_iter": 1,
+        "num_iter": 100,
         "train_size": 0.8,
         "seed": DEFAULT_RANDOM_SEED,
 

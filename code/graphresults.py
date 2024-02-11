@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import wandb
 
-from ioutils import load_df_from_file, filenames_in_folder
+from utils.ioutils import load_df_from_file, filenames_in_folder
 
 
 def plot_submission_results(dataset_name):
