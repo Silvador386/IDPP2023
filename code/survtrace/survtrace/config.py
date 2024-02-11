@@ -3,7 +3,7 @@ from easydict import EasyDict
 STConfig = EasyDict(
     {
         'data': 'metabric', # dataset name, in 'metabric', 'support', or 'seer'
-        'num_durations': 5, # num of discrete intervals for prediction, e.g., num_dur = 5 means the whole period is discretized to be 5 intervals
+        # 'num_durations': 5, # num of discrete intervals for prediction, e.g., num_dur = 5 means the whole period is discretized to be 5 intervals
         # 'horizons': [.25, .5, .75], # the discrete intervals are cut at 0%, 25%, 50%, 75%, 100%
         "horizons": [],
         "times": [],  # my own
@@ -23,7 +23,7 @@ STConfig = EasyDict(
         'num_event': 1, # only set when using SurvTraceMulti for competing risks
         'hidden_act': 'gelu',
         'attention_probs_dropout_prob': 0.1143, #0.1
-        'early_stop_patience': 10,
+        'early_stop_patience': 20,
         'initializer_range': 0.001,
         'layer_norm_eps': 1e-12,
         'max_position_embeddings': 512, # # no use

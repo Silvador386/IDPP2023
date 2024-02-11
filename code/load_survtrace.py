@@ -45,16 +45,16 @@ def load_data(config, X, y_df, train_idx=None, val_idx=None):
         # get the largest duraiton time
         max_duration_idx = df["duration"].argmax()
         if train_idx is None and val_idx is None:
-            df_test = df_feat.drop(max_duration_idx).sample(frac=0.2)
-            df_train = df_feat.drop(df_test.index)
-            df_val = df_train.drop(max_duration_idx).sample(frac=0.1)
-            df_train = df_train.drop(df_val.index)
+            # df_test = df_feat.drop(max_duration_idx).sample(frac=0.2)
+            # df_train = df_feat.drop(df_test.index)
+            df_val = df_feat.drop(max_duration_idx).sample(frac=0.1)
+            df_train = df_feat.drop(df_val.index)
         else:
             df_train = df_feat.iloc[train_idx]
             df_val = df_feat.iloc[val_idx]
             df_test = pd.DataFrame()
         # assign cuts
-        labtrans = LabelTransform(cuts=np.array([df["duration"].min()] + times + [df["duration"].max()]))
+        labtrans = LabelTransform(cuts=np.array([df["duration"].min()-0.01] + times + [df["duration"].max()+0.01]))
         labtrans.fit(*get_target(df.loc[df_train.index]))
         y = labtrans.transform(*get_target(df))  # y_struct = (discrete duration, event indicator)
         df_y_train = pd.DataFrame(
@@ -64,11 +64,8 @@ def load_data(config, X, y_df, train_idx=None, val_idx=None):
             {"duration": y[0][df_val.index], "event": y[1][df_val.index], "proportion": y[2][df_val.index]},
             index=df_val.index)
         # df_y_test = pd.DataFrame({"duration": y[0][df_test.index], "event": y[1][df_test.index],  "proportion": y[2][df_test.index]}, index=df_test.index)
-        if df_test.empty:
-            df_y_test = pd.DataFrame()
-        else:
-            df_y_test = pd.DataFrame(
-                {"duration": df['duration'].loc[df_test.index], "event": df['event'].loc[df_test.index]})
+        # df_y_test = pd.DataFrame(
+        #         {"duration": df['duration'].loc[df_test.index], "event": df['event'].loc[df_test.index]})
 
 
     config['labtrans'] = labtrans
@@ -78,4 +75,4 @@ def load_data(config, X, y_df, train_idx=None, val_idx=None):
     config['vocab_size'] = int(vocab_size)
     config['duration_index'] = labtrans.cuts
     config['out_feature'] = int(labtrans.out_features)
-    return df, df_train, df_y_train, df_test, df_y_test, df_val, df_y_val
+    return df, df_train, df_y_train, df_val, df_y_val
