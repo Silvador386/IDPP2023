@@ -89,16 +89,16 @@ def preprocess(merged_df: pd.DataFrame) -> pd.DataFrame:
     merged_df = create_time_window_features(merged_df, "delta_relapse_time0", "delta_relapse_time0",
                                             available_functions, time_windows, drop_original=True)
 
-    # merged_df = preprocess_mri(merged_df,
-    #                            ['mri_area_label',
-    #                             'lesions_T1', 'lesions_T1_gadolinium',
-    #                             'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
-    #                             'number_of_new_or_enlarged_lesions_T2', 'lesions_T2', 'number_of_total_lesions_T2',
-    #                             ],
-    #                            "delta_mri_time0",
-    #                            time_windows,
-    #                            functions=available_functions,
-    #                            drop_original=True)
+    merged_df = preprocess_mri(merged_df,
+                               ['mri_area_label',
+                                'lesions_T1', 'lesions_T1_gadolinium',
+                                'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
+                                'number_of_new_or_enlarged_lesions_T2', 'lesions_T2', 'number_of_total_lesions_T2',
+                                ],
+                               "delta_mri_time0",
+                               time_windows,
+                               functions=available_functions,
+                               drop_original=True)
 
     target_features = ['outcome_occurred', 'outcome_time']
 
@@ -110,13 +110,13 @@ def preprocess(merged_df: pd.DataFrame) -> pd.DataFrame:
                          # "time_since_onset", "diagnostic_delay",
                          'altered_potential',
                          'potential_value', 'location', 'delta_evoked_potential_time0',
-                         # 'multiple_sclerosis_type', #'delta_observation_time0',  # Might worsen the score
-                         # "altered_potential",
-                         # 'mri_area_label',
-                         # 'lesions_T1', 'lesions_T1_gadolinium',
-                         # 'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
-                         # 'number_of_new_or_enlarged_lesions_T2', 'lesions_T2',
-                         # 'number_of_total_lesions_T2', 'delta_mri_time0'
+                         'multiple_sclerosis_type', 'delta_observation_time0',  # Might worsen the score
+                         "altered_potential",
+                         'mri_area_label',
+                         'lesions_T1', 'lesions_T1_gadolinium',
+                         'number_of_lesions_T1_gadolinium', 'new_or_enlarged_lesions_T2',
+                         'number_of_new_or_enlarged_lesions_T2', 'lesions_T2',
+                         'number_of_total_lesions_T2', 'delta_mri_time0'
                          ]
 
     unfinished_features = list(set(ALL_FEATURES).difference(features_to_leave))
@@ -360,29 +360,28 @@ def preprocess_mri(
         lesions_T2 = selected_data["lesions_T2"]
         num_new_T2 = selected_data["number_of_new_or_enlarged_lesions_T2"]
 
-        # calculated_values = np.apply_along_axis(np.nansum, 1, num_gan_T1)
-        # new_feature_name = f"mri_T1_gadolinium_({start_time}_{end_time})_sum"
-        # output_data[new_feature_name] = calculated_values
-        # calculated_values = np.apply_along_axis(count_not_nan, 1, num_gan_T1)
-        # new_feature_name = f"mri_T1_gadolinium_({start_time}_{end_time})_nan"
-        # output_data[new_feature_name] = calculated_values
+        calculated_values = np.apply_along_axis(np.nansum, 1, num_gan_T1)
+        new_feature_name = f"mri_T1_gadolinium_({start_time}_{end_time})_sum"
+        output_data[new_feature_name] = calculated_values
+        calculated_values = np.apply_along_axis(count_not_nan, 1, num_gan_T1)
+        new_feature_name = f"mri_T1_gadolinium_({start_time}_{end_time})_nan"
+        output_data[new_feature_name] = calculated_values
 
         # mri-label: ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]
-        # for mri_label in ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]:
-        #     mask = (mri_area == mri_label)
-        #
-        #     for region in ["number_of_lesions_T1_gadolinium", "number_of_new_or_enlarged_lesions_T2"]:
-        #         region_data = selected_data[region]
-        #         region_masked = np.where(mask, region_data, np.nan)
-        #         calculated_values = np.apply_along_axis(np.nansum, 1, region_masked)
-        #         new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}"
-        #         output_data[new_feature_name] = calculated_values
+        for mri_label in ["Brain Stem", "Cervical Spinal Cord", "Spinal Cord", "Thoracic Spinal Cord"]:
+            mask = (mri_area == mri_label)
+
+            for region in ["number_of_lesions_T1_gadolinium", "number_of_new_or_enlarged_lesions_T2"]:
+                region_data = selected_data[region]
+                region_masked = np.where(mask, region_data, np.nan)
+                calculated_values = np.apply_along_axis(np.nansum, 1, region_masked)
+                new_feature_name = f"mri_({start_time}_{end_time})_{mri_label}"
+                output_data[new_feature_name] = calculated_values
 
             # for f_name, func in functions.items():
             #     calculated_values = np.apply_along_axis(func, 1, calculated_values)
             #     new_feature_name = f"mri_{mri_label}_({start_time}_{end_time})_{f_name}"
             #     output_data[new_feature_name] = calculated_values
-
 
             # for region in ["number_of_lesions_T1_gadolinium",
             #                "number_of_new_or_enlarged_lesions_T2"]:
