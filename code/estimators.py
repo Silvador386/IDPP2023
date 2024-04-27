@@ -28,16 +28,16 @@ def init_surv_estimators(seed, X, y_df, n_estimators=100):
     # cgb = ComponentwiseGradientBoostingSurvivalAnalysis(random_state=seed)
 
     cox = CoxPHSurvivalAnalysis()
-    surv_trace = SurvTraceWrap(seed, X, y_df, instance_order=0, cumulative=False)
-    surv_trace_cumulative = SurvTraceWrap(seed, X, y_df, instance_order=0, cumulative=True)
+    surv_trace = SurvTraceWrap(seed, instance_order=0, cumulative=False)
+    surv_trace_cumulative = SurvTraceWrap(seed, instance_order=1, cumulative=True)
 
     estimators = {
-        # "RandomForest": rsf,
-        # "GradientBoost": gbs,
+        "RandomForest": rsf,
+        "GradientBoost": gbs,
         # # "MinlipSA": msa,
-        # "CGBSA": cgb,
+        "CGBSA": cgb,
         # "Cox": cox
-        "SurvTRACE": surv_trace,
+        # "SurvTRACE": surv_trace,
         # "SurvTRACE_cumulative": surv_trace_cumulative,
     }
 
@@ -55,14 +55,10 @@ class AvgEnsemble:
     def __init__(self, estimators):
         self.estimators = estimators
         self.num_est = len(estimators)
-        self.averaging_coeffs = [0.25, 0.5, 0.25]
 
     def predict(self, X):
         predictions = np.array([estimator.predict(X).reshape(-1) for estimator in self.estimators]).T
-        predictions = (predictions - np.average(predictions, axis=0)) / np.std(predictions, axis=0)
         averaging = np.average(predictions, axis=1)
-        # averaging = sum([coef*predictions[:, i] for i, coef in enumerate(self.averaging_coeffs)]) # max
-        maxing = np.max(predictions, axis=1)
         return averaging
 
     def predict_cumulative(self, X):
@@ -89,7 +85,7 @@ class AvgEnsemble:
         pass
 
 
-class SurvTraceWrap():
+class SurvTraceWrap:
     hparams = {
         'batch_size': 64,
         'weight_decay': 0.0000284,
@@ -99,9 +95,9 @@ class SurvTraceWrap():
 
     def __init__(
             self,
-            seed,
+            seed: int,
             instance_order: int,
-            cumulative=False,
+            cumulative: bool = False,
             **kwargs
     ):
 
